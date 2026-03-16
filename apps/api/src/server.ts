@@ -7,6 +7,7 @@ import express, {
 } from "express";
 
 import { HttpError } from "./lib/http-error";
+import { createIpAllowlistMiddleware } from "./lib/ip-allowlist";
 import { WEB_DIST_DIR } from "./paths";
 import { createActionsRouter } from "./routes/actions";
 import { createBulkRouter } from "./routes/bulk";
@@ -16,11 +17,17 @@ import { createProjectsRouter } from "./routes/projects";
 import { ActionHistoryService } from "./services/action-history";
 import { ProjectRegistryService } from "./services/project-registry";
 
+type AccessControlOptions = {
+  allowedIps?: string[];
+  trustProxy?: boolean;
+};
+
 type CreateServerOptions = {
   registryService?: ProjectRegistryService;
   actionHistoryService?: ActionHistoryService;
   serveWeb?: boolean;
   webDistDir?: string;
+  accessControl?: AccessControlOptions;
 };
 
 export function createServer(options: CreateServerOptions = {}) {
@@ -31,9 +38,16 @@ export function createServer(options: CreateServerOptions = {}) {
   const serveWeb = options.serveWeb ?? true;
   const webIndexPath = path.join(webDistDir, "index.html");
   const hasBuiltWeb = serveWeb && fs.existsSync(webIndexPath);
+  const accessControl = options.accessControl ?? {};
 
   app.disable("x-powered-by");
+  app.set("trust proxy", accessControl.trustProxy ?? false);
   app.use(express.json());
+  app.use(
+    createIpAllowlistMiddleware({
+      allowlist: accessControl.allowedIps ?? [],
+    }),
+  );
 
   app.use("/api/actions", createActionsRouter({ actionHistoryService }));
   app.use("/api/health", healthRouter);

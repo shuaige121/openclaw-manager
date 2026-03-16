@@ -230,3 +230,25 @@ test("HTML fallback health endpoints are reported as running but degraded", asyn
     false,
   );
 });
+
+test("IP allowlist blocks non-allowlisted clients when trust proxy is enabled", async (context) => {
+  const api = await createApiTestContext(context, {
+    projects: [],
+    accessControl: {
+      allowedIps: ["192.168.7.6"],
+      trustProxy: true,
+    },
+  });
+
+  await api.request
+    .get("/api/projects")
+    .set("X-Forwarded-For", "192.168.7.10")
+    .expect(403);
+
+  const allowedResponse = await api.request
+    .get("/api/projects")
+    .set("X-Forwarded-For", "192.168.7.6")
+    .expect(200);
+
+  assert.equal(allowedResponse.body.source, "registry");
+});

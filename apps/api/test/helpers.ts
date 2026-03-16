@@ -142,6 +142,10 @@ export async function createApiTestContext(
   context: TestContext,
   options?: {
     projects?: StoredProjectRecord[];
+    accessControl?: {
+      allowedIps?: string[];
+      trustProxy?: boolean;
+    };
   },
 ): Promise<ApiTestContext> {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "openclaw-manager-api-test-"));
@@ -171,6 +175,7 @@ export async function createApiTestContext(
     registryService,
     actionHistoryService,
     serveWeb: false,
+    accessControl: options?.accessControl,
   });
 
   return {

@@ -84,6 +84,48 @@ By default:
 
 After `npm run build`, the API serves the built web app on the same port.
 
+## Access control
+
+The manager can be restricted by client IP with:
+
+```bash
+MANAGER_ALLOWED_IPS=127.0.0.1,::1,192.168.7.6
+```
+
+Exact IPs and IPv4 CIDR entries are supported.
+If you deploy behind a trusted reverse proxy, also set:
+
+```bash
+MANAGER_TRUST_PROXY=1
+```
+
+## Manager Telegram bot
+
+An optional manager-specific Telegram command bot can run inside the API process.
+
+Required environment variables:
+
+```bash
+MANAGER_TELEGRAM_BOT_TOKEN=123456:token
+MANAGER_TELEGRAM_ALLOWED_USER_IDS=7624953278
+```
+
+Optional:
+
+```bash
+MANAGER_TELEGRAM_API_BASE_URL=https://api.telegram.org
+MANAGER_TELEGRAM_POLL_TIMEOUT_SECONDS=25
+```
+
+Current bot commands:
+
+- `/projects`
+- `/status <projectId>`
+- `/start <projectId>`
+- `/stop <projectId>`
+- `/restart <projectId>`
+- `/scan <projectId>`
+
 ## Runtime data
 
 Runtime registry and history files are intentionally **gitignored**.
