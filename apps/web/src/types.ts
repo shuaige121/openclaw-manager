@@ -57,6 +57,18 @@ export type ProjectCompatibilityProfile = {
   checks: ProjectCompatibilityCheck[];
 };
 
+export type ProjectModelOption = {
+  ref: string;
+  alias: string | null;
+};
+
+export type ProjectModelProfile = {
+  primaryRef: string | null;
+  fallbackRefs: string[];
+  catalogMode: "open" | "allowlist";
+  configuredModels: ProjectModelOption[];
+};
+
 export type ProjectListItem = {
   id: string;
   name: string;
@@ -69,6 +81,7 @@ export type ProjectListItem = {
   paths: ProjectPaths;
   endpoints: ProjectEndpoints;
   auth: ProjectAuthProfile;
+  model: ProjectModelProfile;
   capabilities: ProjectCapabilities;
   compatibility: ProjectCompatibilityProfile;
 };
@@ -115,6 +128,7 @@ export type ProjectRegistryView = {
   lifecycle: ProjectLifecycle;
   capabilities: ProjectCapabilities;
   auth: ProjectAuthProfile;
+  model: ProjectModelProfile;
   compatibility: ProjectCompatibilityProfile;
 };
 
@@ -165,6 +179,24 @@ export type ProjectCompatibilityScanResponse = {
   ok: boolean;
   projectId: string;
   compatibility: ProjectCompatibilityProfile;
+};
+
+export type ProjectModelUpdateResponse = {
+  ok: boolean;
+  projectId: string;
+  previousModelRef: string | null;
+  restartTriggered: boolean;
+  result: {
+    ok: boolean;
+    command: string;
+    exitCode: number | null;
+    signal: string | null;
+    stdout: string;
+    stderr: string;
+    durationMs: number;
+  } | null;
+  model: ProjectModelProfile;
+  item: ProjectListItem | null;
 };
 
 export type BulkActionExecutePayload =

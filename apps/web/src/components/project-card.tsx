@@ -87,6 +87,10 @@ export function ProjectCard({
           <dd>{project.auth.label}</dd>
         </div>
         <div>
+          <dt>Model</dt>
+          <dd>{project.model.primaryRef ?? "未显式设置"}</dd>
+        </div>
+        <div>
           <dt>Config</dt>
           <dd>{project.paths.configPath}</dd>
         </div>

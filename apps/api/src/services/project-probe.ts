@@ -1,4 +1,5 @@
 import net from "node:net";
+import { readProjectModelProfile } from "./project-models";
 import type {
   ManagerAuthProfile,
   ProjectAuthProfile,
@@ -177,7 +178,10 @@ export async function buildProjectListResponse(
 ): Promise<ProjectListResponse> {
   const items = await Promise.all(
     registry.projects.map(async (project): Promise<ProjectListItem> => {
-      const probe = await probeProjectRuntime(project);
+      const [probe, model] = await Promise.all([
+        probeProjectRuntime(project),
+        readProjectModelProfile(project),
+      ]);
 
       return {
         id: project.id,
@@ -191,6 +195,7 @@ export async function buildProjectListResponse(
         paths: project.paths,
         endpoints: buildProjectEndpoints(project),
         auth: buildAuthProfile(project, registry),
+        model,
         capabilities: project.capabilities,
         compatibility: project.compatibility,
       };

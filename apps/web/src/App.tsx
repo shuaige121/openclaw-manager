@@ -14,6 +14,7 @@ import type {
   ProjectActionName,
   ProjectActionResponse,
   ProjectCompatibilityScanResponse,
+  ProjectModelUpdateResponse,
   ProjectUpsertPayload,
   ProjectsResponse,
 } from "./types";
@@ -80,6 +81,7 @@ export default function App() {
   const [bulkResult, setBulkResult] = useState<BulkActionResponse | null>(null);
   const [activeProjectAction, setActiveProjectAction] = useState<ProjectActionName | null>(null);
   const [compatibilityScanProjectId, setCompatibilityScanProjectId] = useState<string | null>(null);
+  const [modelUpdateProjectId, setModelUpdateProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -424,6 +426,47 @@ export default function App() {
     }
   }
 
+  async function updateProjectModel(
+    projectId: string,
+    payload: {
+      modelRef: string;
+      restartIfRunning: boolean;
+    },
+  ) {
+    setModelUpdateProjectId(projectId);
+    setNotice(null);
+
+    try {
+      const response = await requestApi<ProjectModelUpdateResponse>(`/api/projects/${projectId}/model`, {
+        method: "PATCH",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const restartDetail = response.restartTriggered
+        ? response.result?.ok
+          ? "运行中的项目已经重启。"
+          : `重启失败：${response.result?.stderr || response.result?.stdout || "请查看动作历史。"}`
+        : "项目当前未运行，没有触发重启。";
+
+      setNotice({
+        tone: response.ok ? "success" : "error",
+        text: `${projectId} 默认模型已切到 ${response.model.primaryRef ?? payload.modelRef}。${restartDetail}`,
+      });
+      reloadProjects(projectId);
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: toErrorMessage(error),
+      });
+    } finally {
+      setModelUpdateProjectId(null);
+    }
+  }
+
   let sidePanel;
 
   if (panelMode === "create") {
@@ -498,10 +541,12 @@ export default function App() {
           deleting={mutationState === "deleting"}
           activeAction={activeProjectAction}
           scanningCompatibility={compatibilityScanProjectId === activeProject?.id}
+          modelUpdating={modelUpdateProjectId === activeProject?.id}
           onEdit={openEditPanel}
           onDelete={deleteProject}
           onRunAction={runProjectAction}
           onScanCompatibility={scanProjectCompatibility}
+          onUpdateModel={updateProjectModel}
         />
         <ActionHistoryPanel
           title={activeProject ? `${activeProject.name} 最近动作` : "全局最近动作"}

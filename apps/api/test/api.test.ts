@@ -21,6 +21,7 @@ test("GET /api/projects returns registry-backed items and stopped probe status",
   assert.equal(response.body.items[0].id, "probe-target");
   assert.equal(response.body.items[0].runtimeStatus, "stopped");
   assert.equal(response.body.items[0].healthStatus, "unknown");
+  assert.equal(response.body.items[0].model.primaryRef, null);
 });
 
 test("project registry CRUD routes append history entries", async (context) => {
@@ -73,6 +74,106 @@ test("project action route executes lifecycle command and records stdout in hist
   assert.equal(history.body.items[0].actionName, "start");
   assert.match(history.body.items[0].command, /printf action-started/);
   assert.equal(history.body.items[0].stdout, "action-started");
+});
+
+test("project model route writes config, extends allowlist, and restarts running projects", async (context) => {
+  const api = await createApiTestContext(context, {
+    projects: [],
+  });
+  const server = http.createServer((request, response) => {
+    if (request.url === "/healthz" || request.url === "/readyz") {
+      response.writeHead(200, {
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    response.writeHead(200, {
+      "Content-Type": "text/plain",
+    });
+    response.end("ok");
+  });
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  context.after(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Expected an ephemeral TCP port.");
+  }
+
+  const project = await createProjectFixture(api.tempDir, {
+    id: "model-target",
+    gatewayPort: address.port,
+    config: {
+      gateway: {
+        port: address.port,
+      },
+      agents: {
+        defaults: {
+          model: {
+            primary: "openai/gpt-5",
+            fallbacks: ["anthropic/claude-opus-4-5"],
+          },
+          models: {
+            "openai/gpt-5": {
+              alias: "GPT 5",
+            },
+          },
+        },
+      },
+    },
+    lifecycle: {
+      restartCommand: "printf model-restarted",
+    },
+  });
+
+  await api.request.post("/api/projects").send(project).expect(201);
+
+  const response = await api.request
+    .patch("/api/projects/model-target/model")
+    .send({
+      modelRef: "anthropic/claude-opus-4-6",
+      restartIfRunning: true,
+    })
+    .expect(200);
+
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.previousModelRef, "openai/gpt-5");
+  assert.equal(response.body.restartTriggered, true);
+  assert.equal(response.body.result.stdout, "model-restarted");
+  assert.equal(response.body.model.primaryRef, "anthropic/claude-opus-4-6");
+  assert.deepEqual(response.body.model.fallbackRefs, ["anthropic/claude-opus-4-5"]);
+
+  const config = await api.readProjectConfig("model-target");
+  const agents = expectJsonObject(config.agents);
+  const defaults = expectJsonObject(agents.defaults);
+  const model = expectJsonObject(defaults.model);
+  const models = expectJsonObject(defaults.models);
+
+  assert.equal(model.primary, "anthropic/claude-opus-4-6");
+  assert.deepEqual(model.fallbacks, ["anthropic/claude-opus-4-5"]);
+  assert.deepEqual(expectJsonObject(models["anthropic/claude-opus-4-6"]), {});
+
+  const history = await api.request.get("/api/actions?projectId=model-target&limit=3").expect(200);
+  assert.equal(history.body.items[0].actionName, "model_update");
+  assert.match(history.body.items[0].summary, /anthropic\/claude-opus-4-6/);
+  assert.equal(history.body.items[0].command, "printf model-restarted");
 });
 
 test("bulk action route updates files and records bulk history", async (context) => {

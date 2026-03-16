@@ -1,8 +1,10 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { HttpError } from "../lib/http-error";
 import { ActionHistoryService } from "../services/action-history";
+import { executeProjectAction } from "../services/project-command-runner";
+import { readProjectModelProfile, updateProjectPrimaryModel } from "../services/project-models";
 import { scanProjectCompatibility } from "../services/project-compatibility";
-import { buildProjectListResponse } from "../services/project-probe";
+import { buildProjectListResponse, probeProjectRuntime } from "../services/project-probe";
 import { type ProjectRegistryService } from "../services/project-registry";
 
 type AsyncRouteHandler = (
@@ -14,6 +16,29 @@ type AsyncRouteHandler = (
 function handleAsync(handler: AsyncRouteHandler) {
   return (request: Request, response: Response, next: NextFunction) => {
     void handler(request, response, next).catch(next);
+  };
+}
+
+function parseModelUpdateBody(value: unknown): {
+  modelRef: string;
+  restartIfRunning: boolean;
+} {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new HttpError(400, "model update body must be an object.");
+  }
+
+  const payload = value as Record<string, unknown>;
+  const modelRef = payload.modelRef;
+  if (typeof modelRef !== "string" || modelRef.trim().length === 0) {
+    throw new HttpError(400, "modelRef must be a non-empty string.");
+  }
+
+  const restartIfRunning =
+    payload.restartIfRunning === undefined ? true : Boolean(payload.restartIfRunning);
+
+  return {
+    modelRef: modelRef.trim(),
+    restartIfRunning,
   };
 }
 
@@ -103,9 +128,63 @@ export function createProjectsRouter(options: {
           lifecycle: projectRecord.lifecycle,
           capabilities: projectRecord.capabilities,
           auth: item.auth,
+          model: item.model,
           compatibility: projectRecord.compatibility,
         },
         managerAuth: list.managerAuth,
+      });
+    }),
+  );
+
+  projectsRouter.patch(
+    "/:id/model",
+    handleAsync(async (request, response) => {
+      const project = await registryService.getProject(request.params.id);
+      const { modelRef, restartIfRunning } = parseModelUpdateBody(request.body);
+      const update = await updateProjectPrimaryModel(project, modelRef);
+      const runtime = await probeProjectRuntime(project);
+      const restartResult =
+        restartIfRunning && runtime.runtimeStatus === "running"
+          ? await executeProjectAction(project, "restart")
+          : null;
+      const ok = restartResult?.ok ?? true;
+      const model = await readProjectModelProfile(project);
+
+      await actionHistoryService.appendEntry({
+        kind: "project_registry",
+        ok,
+        projects: [
+          {
+            id: project.id,
+            name: project.name,
+          },
+        ],
+        summary: `${project.name} 默认模型已切到 ${model.primaryRef ?? modelRef}`,
+        detail: [
+          `Default model: ${update.previousModelRef ?? "unset"} -> ${model.primaryRef ?? modelRef}.`,
+          restartResult
+            ? `Restart ${restartResult.ok ? "completed" : "failed"} in ${restartResult.durationMs}ms.`
+            : "Project was not running, so no restart was triggered.",
+        ].join(" "),
+        command: restartResult?.command ?? null,
+        stdout: restartResult?.stdout ?? null,
+        stderr: restartResult?.stderr ?? null,
+        durationMs: restartResult?.durationMs ?? null,
+        actionName: "model_update",
+      });
+
+      const registry = await registryService.readRegistry();
+      const list = await buildProjectListResponse(registry);
+      const item = list.items.find((entry) => entry.id === project.id) ?? null;
+
+      response.json({
+        ok,
+        projectId: project.id,
+        previousModelRef: update.previousModelRef,
+        restartTriggered: restartResult !== null,
+        result: restartResult,
+        model,
+        item,
       });
     }),
   );

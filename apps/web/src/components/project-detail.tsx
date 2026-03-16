@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { BulkIntent, ManagerAuthProfile, ProjectActionName, ProjectListItem } from "../types";
 
 type ProjectDetailProps = {
@@ -8,10 +9,12 @@ type ProjectDetailProps = {
   deleting: boolean;
   activeAction: ProjectActionName | null;
   scanningCompatibility: boolean;
+  modelUpdating: boolean;
   onEdit: (projectId: string) => void;
   onDelete: (projectId: string) => void;
   onRunAction: (projectId: string, action: ProjectActionName) => void;
   onScanCompatibility: (projectId: string) => void;
+  onUpdateModel: (projectId: string, payload: { modelRef: string; restartIfRunning: boolean }) => void;
 };
 
 const bulkDescriptions: Record<BulkIntent, string> = {
@@ -61,6 +64,10 @@ function formatLastSeen(value: string | null): string {
   }).format(date);
 }
 
+function formatModelLabel(modelRef: string, alias?: string | null): string {
+  return alias ? `${alias} · ${modelRef}` : modelRef;
+}
+
 export function ProjectDetail({
   project,
   managerAuth,
@@ -69,11 +76,27 @@ export function ProjectDetail({
   deleting,
   activeAction,
   scanningCompatibility,
+  modelUpdating,
   onEdit,
   onDelete,
   onRunAction,
   onScanCompatibility,
+  onUpdateModel,
 }: ProjectDetailProps) {
+  const [modelRef, setModelRef] = useState("");
+  const [restartIfRunning, setRestartIfRunning] = useState(true);
+
+  useEffect(() => {
+    if (!project) {
+      setModelRef("");
+      setRestartIfRunning(true);
+      return;
+    }
+
+    setModelRef(project.model.primaryRef ?? project.model.configuredModels[0]?.ref ?? "");
+    setRestartIfRunning(true);
+  }, [project]);
+
   if (!project) {
     return (
       <aside className="detail-panel">
@@ -209,6 +232,71 @@ export function ProjectDetail({
             <dd>{formatLastSeen(project.lastSeenAt)}</dd>
           </div>
         </dl>
+      </section>
+
+      <section className="detail-section">
+        <p className="section-label">默认模型</p>
+        <div className="callout-box">
+          <strong>当前默认：</strong> {project.model.primaryRef ?? "未显式设置"}<br />
+          <strong>模型目录：</strong>{" "}
+          {project.model.catalogMode === "allowlist"
+            ? `allowlist（${project.model.configuredModels.length} 个已配置模型）`
+            : "open（未限制 allowlist，可直接手填 provider/model）"}
+          <br />
+          <strong>Fallback：</strong> {project.model.fallbackRefs.length > 0 ? project.model.fallbackRefs.join(", ") : "未设置"}
+        </div>
+        {project.model.configuredModels.length > 0 ? (
+          <label className="form-field">
+            <span>已配置模型</span>
+            <select
+              value={
+                project.model.configuredModels.some((entry) => entry.ref === modelRef) ? modelRef : "__custom__"
+              }
+              onChange={(event) => {
+                if (event.target.value === "__custom__") {
+                  return;
+                }
+                setModelRef(event.target.value);
+              }}
+              disabled={modelUpdating}
+            >
+              {project.model.configuredModels.map((entry) => (
+                <option key={entry.ref} value={entry.ref}>
+                  {formatModelLabel(entry.ref, entry.alias)}
+                </option>
+              ))}
+              <option value="__custom__">手动输入其他模型</option>
+            </select>
+          </label>
+        ) : null}
+        <label className="form-field">
+          <span>provider/model</span>
+          <input
+            value={modelRef}
+            onChange={(event) => setModelRef(event.target.value)}
+            placeholder="anthropic/claude-opus-4-6"
+            disabled={modelUpdating}
+          />
+        </label>
+        <label className="checkbox-field">
+          <input
+            type="checkbox"
+            checked={restartIfRunning}
+            onChange={(event) => setRestartIfRunning(event.target.checked)}
+            disabled={modelUpdating}
+          />
+          <span>项目运行中时自动重启，让模型变更立即生效</span>
+        </label>
+        <div className="panel-action-row">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onUpdateModel(project.id, { modelRef, restartIfRunning })}
+            disabled={modelUpdating || modelRef.trim().length === 0 || activeAction !== null}
+          >
+            {modelUpdating ? "保存中..." : "保存默认模型"}
+          </button>
+        </div>
       </section>
 
       <section className="detail-section">

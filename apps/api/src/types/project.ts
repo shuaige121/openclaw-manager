@@ -63,6 +63,18 @@ export interface ProjectCompatibilityProfile {
   checks: ProjectCompatibilityCheck[];
 }
 
+export interface ProjectModelOption {
+  ref: string;
+  alias: string | null;
+}
+
+export interface ProjectModelProfile {
+  primaryRef: string | null;
+  fallbackRefs: string[];
+  catalogMode: "open" | "allowlist";
+  configuredModels: ProjectModelOption[];
+}
+
 export interface ProjectLifecycleCommands {
   startCommand: string;
   stopCommand: string;
@@ -114,6 +126,7 @@ export interface ProjectListItem {
   paths: ProjectPaths;
   endpoints: ProjectEndpoints;
   auth: ProjectAuthProfile;
+  model: ProjectModelProfile;
   capabilities: ProjectCapabilities;
   compatibility: ProjectCompatibilityProfile;
 }
