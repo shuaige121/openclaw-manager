@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "managerAuth": {
+    "strategy": "token",
+    "label": "default manager gateway token",
+    "secret": "change-me"
+  },
+  "projects": [
+    {
+      "id": "main",
+      "name": "Main Gateway",
+      "description": "Primary OpenClaw project used for production conversations.",
+      "gateway": {
+        "protocol": "http",
+        "host": "127.0.0.1",
+        "port": 18789
+      },
+      "tags": [
+        "production"
+      ],
+      "paths": {
+        "rootPath": "/srv/openclaw/main",
+        "configPath": "/srv/openclaw/main/openclaw.json",
+        "workspacePath": "/srv/openclaw/main/workspace"
+      },
+      "auth": {
+        "mode": "inherit_manager"
+      },
+      "lifecycle": {
+        "startCommand": "pm2 start openclaw-main",
+        "stopCommand": "pm2 stop openclaw-main",
+        "restartCommand": "pm2 restart openclaw-main"
+      },
+      "capabilities": {
+        "bulkHooks": true,
+        "bulkSkills": true,
+        "bulkMemory": true,
+        "bulkConfigPatch": true
+      },
+      "compatibility": {
+        "status": "runtime_only",
+        "reason": "No compatibility scan has been recorded yet.",
+        "lastScannedAt": null,
+        "manualOverride": null,
+        "checks": [
+          {
+            "name": "lifecycle",
+            "supported": false,
+            "message": "Compatibility has not been scanned yet."
+          },
+          {
+            "name": "gateway_probe",
+            "supported": false,
+            "message": "Compatibility has not been scanned yet."
+          },
+          {
+            "name": "web_ui",
+            "supported": false,
+            "message": "Compatibility has not been scanned yet."
+          },
+          {
+            "name": "config_patch",
+            "supported": false,
+            "message": "Compatibility has not been scanned yet."
+          },
+          {
+            "name": "hooks",
+            "supported": false,
+            "message": "Compatibility has not been scanned yet."
+          },
+          {
+            "name": "skills",
+            "supported": false,
+            "message": "Compatibility has not been scanned yet."
+          },
+          {
+            "name": "memory",
+            "supported": false,
+            "message": "Compatibility has not been scanned yet."
+          }
+        ]
+      }
+    }
+  ]
+}

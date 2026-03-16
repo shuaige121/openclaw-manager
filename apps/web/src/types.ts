@@ -1,0 +1,250 @@
+export type ProjectRuntimeStatus = "running" | "starting" | "stopped" | "error";
+export type ProjectHealthStatus = "healthy" | "degraded" | "unknown" | "unhealthy";
+export type ProjectAuthMode = "inherit_manager" | "custom";
+export type ProjectAuthStrategy = "token" | "password";
+export type ProjectGatewayProtocol = "http" | "https";
+export type BulkIntent = "hooks" | "skills" | "memory" | "config";
+export type ProjectActionName = "start" | "stop" | "restart";
+export type HistoryEntryKind = "project_action" | "bulk_action" | "project_registry";
+export type ProjectCompatibilityStatus = "incompatible" | "runtime_only" | "full";
+export type ProjectCompatibilityCheckName =
+  | "lifecycle"
+  | "gateway_probe"
+  | "web_ui"
+  | "config_patch"
+  | "hooks"
+  | "skills"
+  | "memory";
+
+export type ProjectPaths = {
+  rootPath: string;
+  configPath: string;
+  workspacePath: string;
+};
+
+export type ProjectEndpoints = {
+  gatewayUrl: string;
+  controlUiUrl: string;
+  healthUrl: string;
+  readyUrl: string;
+};
+
+export type ProjectAuthProfile = {
+  mode: ProjectAuthMode;
+  strategy: ProjectAuthStrategy;
+  label: string;
+  canOverride: boolean;
+};
+
+export type ProjectCapabilities = {
+  bulkHooks: boolean;
+  bulkSkills: boolean;
+  bulkMemory: boolean;
+  bulkConfigPatch: boolean;
+};
+
+export type ProjectCompatibilityCheck = {
+  name: ProjectCompatibilityCheckName;
+  supported: boolean;
+  message: string;
+};
+
+export type ProjectCompatibilityProfile = {
+  status: ProjectCompatibilityStatus;
+  reason: string;
+  lastScannedAt: string | null;
+  manualOverride: ProjectCompatibilityStatus | null;
+  checks: ProjectCompatibilityCheck[];
+};
+
+export type ProjectListItem = {
+  id: string;
+  name: string;
+  description: string;
+  runtimeStatus: ProjectRuntimeStatus;
+  healthStatus: ProjectHealthStatus;
+  gatewayPort: number;
+  tags: string[];
+  lastSeenAt: string | null;
+  paths: ProjectPaths;
+  endpoints: ProjectEndpoints;
+  auth: ProjectAuthProfile;
+  capabilities: ProjectCapabilities;
+  compatibility: ProjectCompatibilityProfile;
+};
+
+export type ManagerAuthProfile = {
+  strategy: ProjectAuthStrategy;
+  label: string;
+  inheritedProjects: number;
+  overriddenProjects: number;
+};
+
+export type ProjectsResponse = {
+  items: ProjectListItem[];
+  summary: {
+    totalProjects: number;
+    runningProjects: number;
+    healthyProjects: number;
+    authOverrides: number;
+  };
+  managerAuth: ManagerAuthProfile;
+  generatedAt: string;
+  source: string;
+};
+
+export type ProjectGateway = {
+  protocol: ProjectGatewayProtocol;
+  host: string;
+  port: number;
+};
+
+export type ProjectLifecycle = {
+  startCommand: string;
+  stopCommand: string;
+  restartCommand: string;
+};
+
+export type ProjectRegistryView = {
+  id: string;
+  name: string;
+  description: string;
+  gateway: ProjectGateway;
+  tags: string[];
+  paths: ProjectPaths;
+  lifecycle: ProjectLifecycle;
+  capabilities: ProjectCapabilities;
+  auth: ProjectAuthProfile;
+  compatibility: ProjectCompatibilityProfile;
+};
+
+export type ProjectDetailResponse = {
+  item: ProjectListItem;
+  registry: ProjectRegistryView;
+  managerAuth: ManagerAuthProfile;
+};
+
+export type ProjectUpsertPayload = {
+  id: string;
+  name: string;
+  description: string;
+  gateway: ProjectGateway;
+  tags: string[];
+  paths: ProjectPaths;
+  auth:
+    | {
+        mode: "inherit_manager";
+      }
+    | {
+        mode: "custom";
+        strategy: ProjectAuthStrategy;
+        label: string;
+        secret?: string;
+      };
+  lifecycle: ProjectLifecycle;
+  capabilities: ProjectCapabilities;
+};
+
+export type ProjectActionResponse = {
+  ok: boolean;
+  action: ProjectActionName;
+  projectId: string;
+  result: {
+    ok: boolean;
+    command: string;
+    exitCode: number | null;
+    signal: string | null;
+    stdout: string;
+    stderr: string;
+    durationMs: number;
+  };
+  item: ProjectListItem | null;
+};
+
+export type ProjectCompatibilityScanResponse = {
+  ok: boolean;
+  projectId: string;
+  compatibility: ProjectCompatibilityProfile;
+};
+
+export type BulkActionExecutePayload =
+  | {
+      action: "hooks";
+      projectIds: string[];
+      payload: {
+        mode: "enable" | "disable";
+        hookName: string;
+      };
+    }
+  | {
+      action: "skills";
+      projectIds: string[];
+      payload: {
+        mode: "enable" | "disable";
+        skillName: string;
+      };
+    }
+  | {
+      action: "memory";
+      projectIds: string[];
+      payload:
+        | {
+            mode: "append";
+            content: string;
+            blockId?: string;
+          }
+        | {
+            mode: "remove";
+            blockId: string;
+          };
+    }
+  | {
+      action: "config";
+      projectIds: string[];
+      payload:
+        | {
+            mode: "set";
+            path: string;
+            value: unknown;
+          }
+        | {
+            mode: "delete";
+            path: string;
+          };
+    };
+
+export type BulkActionResponse = {
+  ok: boolean;
+  action: BulkIntent;
+  projectIds: string[];
+  results: Array<{
+    projectId: string;
+    projectName: string;
+    ok: boolean;
+    message: string;
+  }>;
+};
+
+export type ActionHistoryEntry = {
+  id: string;
+  kind: HistoryEntryKind;
+  ok: boolean;
+  createdAt: string;
+  projects: Array<{
+    id: string;
+    name: string;
+  }>;
+  summary: string;
+  detail: string;
+  command: string | null;
+  stdout: string | null;
+  stderr: string | null;
+  durationMs: number | null;
+  actionName: string;
+};
+
+export type ActionHistoryResponse = {
+  items: ActionHistoryEntry[];
+  generatedAt: string;
+  totalItems: number;
+};

@@ -1,0 +1,204 @@
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { HttpError } from "../lib/http-error";
+import { ActionHistoryService } from "../services/action-history";
+import { scanProjectCompatibility } from "../services/project-compatibility";
+import { buildProjectListResponse } from "../services/project-probe";
+import { type ProjectRegistryService } from "../services/project-registry";
+
+type AsyncRouteHandler = (
+  request: Request,
+  response: Response,
+  next: NextFunction,
+) => Promise<void>;
+
+function handleAsync(handler: AsyncRouteHandler) {
+  return (request: Request, response: Response, next: NextFunction) => {
+    void handler(request, response, next).catch(next);
+  };
+}
+
+export function createProjectsRouter(options: {
+  registryService: ProjectRegistryService;
+  actionHistoryService?: ActionHistoryService;
+}) {
+  const projectsRouter = Router();
+  const registryService = options.registryService;
+  const actionHistoryService = options.actionHistoryService ?? new ActionHistoryService();
+
+  projectsRouter.get(
+    "/",
+    handleAsync(async (_request, response) => {
+      const registry = await registryService.readRegistry();
+      response.json(await buildProjectListResponse(registry));
+    }),
+  );
+
+  projectsRouter.patch(
+    "/manager-auth",
+    handleAsync(async (request, response) => {
+      const managerAuth = await registryService.updateManagerAuth(request.body);
+      response.json({
+        ok: true,
+        managerAuth: {
+          strategy: managerAuth.strategy,
+          label: managerAuth.label,
+        },
+        registryPath: registryService.getRegistryPath(),
+      });
+    }),
+  );
+
+  projectsRouter.post(
+    "/",
+    handleAsync(async (request, response) => {
+      const createdProject = await registryService.createProject(request.body);
+      const compatibility = await scanProjectCompatibility(createdProject);
+      const project = await registryService.updateProjectCompatibility(createdProject.id, compatibility);
+      await actionHistoryService.appendEntry({
+        kind: "project_registry",
+        ok: true,
+        projects: [
+          {
+            id: project.id,
+            name: project.name,
+          },
+        ],
+        summary: `项目 ${project.name} 已创建`,
+        detail: `Registered ${project.id} at gateway port ${project.gateway.port}.`,
+        command: null,
+        stdout: null,
+        stderr: null,
+        durationMs: null,
+        actionName: "project_create",
+      });
+      response.status(201).json({
+        ok: true,
+        projectId: project.id,
+        registryPath: registryService.getRegistryPath(),
+      });
+    }),
+  );
+
+  projectsRouter.get(
+    "/:id",
+    handleAsync(async (request, response) => {
+      const registry = await registryService.readRegistry();
+      const list = await buildProjectListResponse(registry);
+      const item = list.items.find((project) => project.id === request.params.id);
+      const projectRecord = registry.projects.find((project) => project.id === request.params.id);
+
+      if (!item || !projectRecord) {
+        throw new HttpError(404, `Project "${request.params.id}" was not found.`);
+      }
+
+      response.json({
+        item,
+        registry: {
+          id: projectRecord.id,
+          name: projectRecord.name,
+          description: projectRecord.description,
+          gateway: projectRecord.gateway,
+          tags: projectRecord.tags,
+          paths: projectRecord.paths,
+          lifecycle: projectRecord.lifecycle,
+          capabilities: projectRecord.capabilities,
+          auth: item.auth,
+          compatibility: projectRecord.compatibility,
+        },
+        managerAuth: list.managerAuth,
+      });
+    }),
+  );
+
+  projectsRouter.patch(
+    "/:id",
+    handleAsync(async (request, response) => {
+      const updatedProject = await registryService.updateProject(request.params.id, request.body);
+      const compatibility = await scanProjectCompatibility(updatedProject);
+      const project = await registryService.updateProjectCompatibility(updatedProject.id, compatibility);
+      await actionHistoryService.appendEntry({
+        kind: "project_registry",
+        ok: true,
+        projects: [
+          {
+            id: project.id,
+            name: project.name,
+          },
+        ],
+        summary: `项目 ${project.name} 已更新`,
+        detail: `Updated registry record for ${project.id}.`,
+        command: null,
+        stdout: null,
+        stderr: null,
+        durationMs: null,
+        actionName: "project_update",
+      });
+      response.json({
+        ok: true,
+        projectId: project.id,
+        registryPath: registryService.getRegistryPath(),
+      });
+    }),
+  );
+
+  projectsRouter.post(
+    "/:id/scan-compatibility",
+    handleAsync(async (request, response) => {
+      const project = await registryService.getProject(request.params.id);
+      const compatibility = await scanProjectCompatibility(project);
+      const updatedProject = await registryService.updateProjectCompatibility(project.id, compatibility);
+
+      await actionHistoryService.appendEntry({
+        kind: "project_registry",
+        ok: true,
+        projects: [
+          {
+            id: updatedProject.id,
+            name: updatedProject.name,
+          },
+        ],
+        summary: `项目 ${updatedProject.name} 已完成兼容性扫描`,
+        detail: `Compatibility scan classified ${updatedProject.id} as ${updatedProject.compatibility.status}.`,
+        command: null,
+        stdout: null,
+        stderr: null,
+        durationMs: null,
+        actionName: "compatibility_scan",
+      });
+
+      response.json({
+        ok: true,
+        projectId: updatedProject.id,
+        compatibility: updatedProject.compatibility,
+      });
+    }),
+  );
+
+  projectsRouter.delete(
+    "/:id",
+    handleAsync(async (request, response) => {
+      const project = await registryService.getProject(request.params.id);
+      await registryService.deleteProject(request.params.id);
+      await actionHistoryService.appendEntry({
+        kind: "project_registry",
+        ok: true,
+        projects: [
+          {
+            id: project.id,
+            name: project.name,
+          },
+        ],
+        summary: `项目 ${project.name} 已删除`,
+        detail: `Removed ${project.id} from the manager registry.`,
+        command: null,
+        stdout: null,
+        stderr: null,
+        durationMs: null,
+        actionName: "project_delete",
+      });
+      response.status(204).end();
+    }),
+  );
+
+  return projectsRouter;
+}

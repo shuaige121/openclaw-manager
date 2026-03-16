@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.DS_Store
+*.log
+.env
+.env.*
+*.tsbuildinfo
+.claude_codex_runs
+data/projects.json
+data/action-history.json
+data/*.local.json
