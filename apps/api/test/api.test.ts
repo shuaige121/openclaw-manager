@@ -22,6 +22,7 @@ test("GET /api/projects returns registry-backed items and stopped probe status",
   assert.equal(response.body.items[0].runtimeStatus, "stopped");
   assert.equal(response.body.items[0].healthStatus, "unknown");
   assert.equal(response.body.items[0].model.primaryRef, null);
+  assert.equal(response.body.items[0].sandbox.mode, "off");
 });
 
 test("project registry CRUD routes append history entries", async (context) => {
@@ -346,6 +347,118 @@ test("project memory mode route switches between stateless and normal and blocks
   assert.equal(normalMemoryFlush.enabled, true);
   assert.equal(normalSessionMemory.enabled, true);
   assert.equal("meta" in normalConfig, false);
+});
+
+test("project template route exposes catalog and applies sandboxed template to config", async (context) => {
+  const api = await createApiTestContext(context, {
+    projects: [],
+  });
+  const server = http.createServer((request, response) => {
+    if (request.url === "/healthz" || request.url === "/readyz") {
+      response.writeHead(200, {
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    response.writeHead(200, {
+      "Content-Type": "text/plain",
+    });
+    response.end("ok");
+  });
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  context.after(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Expected an ephemeral TCP port.");
+  }
+
+  const project = await createProjectFixture(api.tempDir, {
+    id: "template-target",
+    gatewayPort: address.port,
+    config: {
+      gateway: {
+        port: address.port,
+      },
+      plugins: {
+        slots: {
+          memory: "memory-core",
+        },
+      },
+      agents: {
+        defaults: {
+          compaction: {
+            memoryFlush: {
+              enabled: true,
+            },
+          },
+        },
+      },
+    },
+    lifecycle: {
+      restartCommand: "printf template-restarted",
+    },
+  });
+
+  await api.request.post("/api/projects").send(project).expect(201);
+
+  const templatesResponse = await api.request.get("/api/projects/templates").expect(200);
+  assert.deepEqual(
+    templatesResponse.body.items.map((item: { id: string }) => item.id),
+    ["general", "stateless", "sandboxed"],
+  );
+
+  const applyResponse = await api.request
+    .post("/api/projects/template-target/apply-template")
+    .send({
+      templateId: "sandboxed",
+      restartIfRunning: true,
+    })
+    .expect(200);
+
+  assert.equal(applyResponse.body.ok, true);
+  assert.equal(applyResponse.body.templateId, "sandboxed");
+  assert.equal(applyResponse.body.restartTriggered, true);
+  assert.equal(applyResponse.body.result.stdout, "template-restarted");
+  assert.equal(applyResponse.body.memory.mode, "normal");
+  assert.equal(applyResponse.body.sandbox.mode, "all");
+  assert.equal(applyResponse.body.sandbox.backend, "docker");
+  assert.equal(applyResponse.body.sandbox.scope, "session");
+  assert.equal(applyResponse.body.sandbox.workspaceAccess, "none");
+  assert.equal(applyResponse.body.sandbox.dockerNetwork, "none");
+
+  const config = await api.readProjectConfig("template-target");
+  const agents = expectJsonObject(config.agents);
+  const defaults = expectJsonObject(agents.defaults);
+  const sandbox = expectJsonObject(defaults.sandbox);
+  const docker = expectJsonObject(sandbox.docker);
+
+  assert.equal(sandbox.mode, "all");
+  assert.equal(sandbox.backend, "docker");
+  assert.equal(sandbox.scope, "session");
+  assert.equal(sandbox.workspaceAccess, "none");
+  assert.equal(docker.network, "none");
+
+  const history = await api.request.get("/api/actions?projectId=template-target&limit=5").expect(200);
+  assert.equal(history.body.items[0].actionName, "template_apply");
+  assert.match(history.body.items[0].summary, /sandboxed|沙箱隔离 Bot/);
 });
 
 test("bulk action route updates files and records bulk history", async (context) => {

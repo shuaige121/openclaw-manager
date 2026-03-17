@@ -5,6 +5,8 @@ import type {
   ProjectActionName,
   ProjectListItem,
   ProjectMemoryMode,
+  ProjectTemplateDefinition,
+  ProjectTemplateId,
 } from "../types";
 
 type ProjectDetailProps = {
@@ -17,6 +19,8 @@ type ProjectDetailProps = {
   scanningCompatibility: boolean;
   modelUpdating: boolean;
   memoryUpdating: boolean;
+  templateApplying: boolean;
+  templates: ProjectTemplateDefinition[];
   onEdit: (projectId: string) => void;
   onDelete: (projectId: string) => void;
   onRunAction: (projectId: string, action: ProjectActionName) => void;
@@ -25,6 +29,10 @@ type ProjectDetailProps = {
   onUpdateMemoryMode: (
     projectId: string,
     payload: { mode: ProjectMemoryMode; restartIfRunning: boolean },
+  ) => void;
+  onApplyTemplate: (
+    projectId: string,
+    payload: { templateId: ProjectTemplateId; restartIfRunning: boolean },
   ) => void;
 };
 
@@ -69,6 +77,36 @@ const memoryModeDescription: Record<ProjectMemoryMode, string> = {
   stateless: "完全白纸。既不读记忆，也不写记忆，适合客服机器人或严格无状态 bot。",
 };
 
+const sandboxModeLabel: Record<ProjectListItem["sandbox"]["mode"], string> = {
+  off: "关闭",
+  "non-main": "仅非主会话",
+  all: "全部会话",
+};
+
+const sandboxScopeLabel: Record<ProjectListItem["sandbox"]["scope"], string> = {
+  session: "每会话一个沙箱",
+  agent: "每 Agent 一个沙箱",
+  shared: "所有会话共享",
+};
+
+const workspaceAccessLabel: Record<ProjectListItem["sandbox"]["workspaceAccess"], string> = {
+  none: "不暴露工作区",
+  ro: "只读工作区",
+  rw: "读写工作区",
+};
+
+function deriveTemplateId(project: ProjectListItem): ProjectTemplateId {
+  if (project.memory.mode === "stateless" && project.sandbox.mode === "off") {
+    return "stateless";
+  }
+
+  if (project.sandbox.mode !== "off") {
+    return "sandboxed";
+  }
+
+  return "general";
+}
+
 function formatLastSeen(value: string | null): string {
   if (!value) {
     return "尚未探测到";
@@ -101,17 +139,22 @@ export function ProjectDetail({
   scanningCompatibility,
   modelUpdating,
   memoryUpdating,
+  templateApplying,
+  templates,
   onEdit,
   onDelete,
   onRunAction,
   onScanCompatibility,
   onUpdateModel,
   onUpdateMemoryMode,
+  onApplyTemplate,
 }: ProjectDetailProps) {
   const [modelRef, setModelRef] = useState("");
   const [restartIfRunning, setRestartIfRunning] = useState(true);
   const [memoryMode, setMemoryMode] = useState<ProjectMemoryMode>("normal");
   const [restartMemoryIfRunning, setRestartMemoryIfRunning] = useState(true);
+  const [templateId, setTemplateId] = useState<ProjectTemplateId>("general");
+  const [restartTemplateIfRunning, setRestartTemplateIfRunning] = useState(true);
 
   useEffect(() => {
     if (!project) {
@@ -119,6 +162,8 @@ export function ProjectDetail({
       setRestartIfRunning(true);
       setMemoryMode("normal");
       setRestartMemoryIfRunning(true);
+      setTemplateId("general");
+      setRestartTemplateIfRunning(true);
       return;
     }
 
@@ -126,6 +171,8 @@ export function ProjectDetail({
     setRestartIfRunning(true);
     setMemoryMode(project.memory.mode);
     setRestartMemoryIfRunning(true);
+    setTemplateId(deriveTemplateId(project));
+    setRestartTemplateIfRunning(true);
   }, [project]);
 
   if (!project) {
@@ -139,6 +186,9 @@ export function ProjectDetail({
       </aside>
     );
   }
+
+  const selectedTemplate =
+    templates.find((template) => template.id === templateId) ?? templates[0] ?? null;
 
   return (
     <aside className="detail-panel">
@@ -370,6 +420,90 @@ export function ProjectDetail({
             disabled={memoryUpdating || activeAction !== null || memoryMode === project.memory.mode}
           >
             {memoryUpdating ? "保存中..." : "保存记忆策略"}
+          </button>
+        </div>
+      </section>
+
+      <section className="detail-section">
+        <p className="section-label">Sandbox</p>
+        <div className="callout-box">
+          <strong>当前模式：</strong> {sandboxModeLabel[project.sandbox.mode]}<br />
+          <strong>Backend：</strong> {project.sandbox.backend}<br />
+          <strong>Scope：</strong> {sandboxScopeLabel[project.sandbox.scope]}<br />
+          <strong>Workspace Access：</strong> {workspaceAccessLabel[project.sandbox.workspaceAccess]}<br />
+          <strong>Docker Network：</strong> {project.sandbox.dockerNetwork ?? "默认值"}<br />
+          <strong>Docker Image：</strong> {project.sandbox.dockerImage ?? "OpenClaw 默认镜像"}
+        </div>
+        {project.sandbox.toolAllow.length > 0 || project.sandbox.toolDeny.length > 0 ? (
+          <div className="callout-box callout-box-muted">
+            <strong>Sandbox Tool Policy</strong>
+            <br />
+            allow: {project.sandbox.toolAllow.length > 0 ? project.sandbox.toolAllow.join(", ") : "默认"}
+            <br />
+            deny: {project.sandbox.toolDeny.length > 0 ? project.sandbox.toolDeny.join(", ") : "默认"}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="detail-section">
+        <p className="section-label">模板</p>
+        <label className="form-field">
+          <span>策略模板</span>
+          <select
+            value={templateId}
+            onChange={(event) => setTemplateId(event.target.value as ProjectTemplateId)}
+            disabled={templateApplying || templates.length === 0}
+          >
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedTemplate ? (
+          <>
+            <div className="callout-box">
+              <strong>{selectedTemplate.summary}</strong>
+              <br />
+              {selectedTemplate.description}
+              <br />
+              <strong>模板记忆：</strong> {selectedTemplate.memoryMode}
+              <br />
+              <strong>模板 Sandbox：</strong> {selectedTemplate.sandbox.mode} / {selectedTemplate.sandbox.backend} /{" "}
+              {selectedTemplate.sandbox.scope} / {selectedTemplate.sandbox.workspaceAccess}
+            </div>
+            <div className="callout-box callout-box-muted">
+              {selectedTemplate.notes.map((note) => (
+                <div key={note}>{note}</div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="callout-box callout-box-muted">当前没有可用模板。</div>
+        )}
+        <label className="checkbox-field">
+          <input
+            type="checkbox"
+            checked={restartTemplateIfRunning}
+            onChange={(event) => setRestartTemplateIfRunning(event.target.checked)}
+            disabled={templateApplying || templates.length === 0}
+          />
+          <span>项目运行中时自动重启，让模板立即生效</span>
+        </label>
+        <div className="panel-action-row">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() =>
+              onApplyTemplate(project.id, {
+                templateId,
+                restartIfRunning: restartTemplateIfRunning,
+              })
+            }
+            disabled={templateApplying || activeAction !== null || selectedTemplate === null}
+          >
+            {templateApplying ? "套用中..." : "套用模板"}
           </button>
         </div>
       </section>

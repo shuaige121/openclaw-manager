@@ -23,6 +23,26 @@ export function BulkToolbar({
   onClearSelection,
 }: BulkToolbarProps) {
   const names = selectedProjects.map((project) => project.name).join("、");
+  const intentAvailability: Record<BulkIntent, { enabled: boolean; reason: string }> = {
+    hooks: {
+      enabled: selectedProjects.every((project) => project.capabilities.bulkHooks),
+      reason: "有项目禁用了批量 Hook。",
+    },
+    skills: {
+      enabled: selectedProjects.every((project) => project.capabilities.bulkSkills),
+      reason: "有项目禁用了批量 Skill。",
+    },
+    memory: {
+      enabled: selectedProjects.every(
+        (project) => project.capabilities.bulkMemory && project.memory.mode === "normal",
+      ),
+      reason: "有项目不是 normal 记忆模式，或禁用了批量记忆。",
+    },
+    config: {
+      enabled: selectedProjects.every((project) => project.capabilities.bulkConfigPatch),
+      reason: "有项目禁用了批量配置 Patch。",
+    },
+  };
 
   return (
     <section className="bulk-toolbar">
@@ -41,6 +61,8 @@ export function BulkToolbar({
             type="button"
             className={`ghost-button${bulkIntent === intent ? " ghost-button-active" : ""}`}
             onClick={() => onIntentChange(intent as BulkIntent)}
+            disabled={!intentAvailability[intent as BulkIntent].enabled}
+            title={intentAvailability[intent as BulkIntent].enabled ? undefined : intentAvailability[intent as BulkIntent].reason}
           >
             {label}
           </button>

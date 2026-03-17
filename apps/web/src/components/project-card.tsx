@@ -95,8 +95,8 @@ export function ProjectCard({
           <dd>{project.memory.mode}</dd>
         </div>
         <div>
-          <dt>Config</dt>
-          <dd>{project.paths.configPath}</dd>
+          <dt>Sandbox</dt>
+          <dd>{project.sandbox.mode}</dd>
         </div>
         <div>
           <dt>Workspace</dt>

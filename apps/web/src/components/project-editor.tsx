@@ -6,17 +6,24 @@ import type {
   ProjectCapabilities,
   ProjectDetailResponse,
   ProjectGatewayProtocol,
+  ProjectTemplateDefinition,
+  ProjectTemplateId,
   ProjectUpsertPayload,
 } from "../types";
 
 type ProjectEditorProps = {
   mode: "create" | "edit";
   managerAuth: ManagerAuthProfile | null;
+  templates: ProjectTemplateDefinition[];
   initialProject: ProjectDetailResponse["registry"] | null;
   busy: boolean;
   errorMessage: string | null;
   onCancel: () => void;
-  onSubmit: (payload: ProjectUpsertPayload) => Promise<void>;
+  onSubmit: (payload: {
+    project: ProjectUpsertPayload;
+    templateId: ProjectTemplateId | null;
+    applyTemplateAfterCreate: boolean;
+  }) => Promise<void>;
 };
 
 type EditorState = {
@@ -37,6 +44,8 @@ type EditorState = {
   startCommand: string;
   stopCommand: string;
   restartCommand: string;
+  templateId: ProjectTemplateId;
+  applyTemplateAfterCreate: boolean;
   bulkHooks: boolean;
   bulkSkills: boolean;
   bulkMemory: boolean;
@@ -69,6 +78,8 @@ function createDefaultState(): EditorState {
     startCommand: "",
     stopCommand: "",
     restartCommand: "",
+    templateId: "general",
+    applyTemplateAfterCreate: false,
     ...DEFAULT_CAPABILITIES,
   };
 }
@@ -92,6 +103,8 @@ function createStateFromProject(project: ProjectDetailResponse["registry"]): Edi
     startCommand: project.lifecycle.startCommand,
     stopCommand: project.lifecycle.stopCommand,
     restartCommand: project.lifecycle.restartCommand,
+    templateId: "general",
+    applyTemplateAfterCreate: false,
     bulkHooks: project.capabilities.bulkHooks,
     bulkSkills: project.capabilities.bulkSkills,
     bulkMemory: project.capabilities.bulkMemory,
@@ -109,6 +122,7 @@ function toTagArray(value: string): string[] {
 export function ProjectEditor({
   mode,
   managerAuth,
+  templates,
   initialProject,
   busy,
   errorMessage,
@@ -117,6 +131,10 @@ export function ProjectEditor({
 }: ProjectEditorProps) {
   const [state, setState] = useState<EditorState>(createDefaultState);
   const [localError, setLocalError] = useState<string | null>(null);
+  const selectedTemplate =
+    mode === "create"
+      ? templates.find((template) => template.id === state.templateId) ?? templates[0] ?? null
+      : null;
 
   useEffect(() => {
     if (mode === "create") {
@@ -192,7 +210,11 @@ export function ProjectEditor({
       },
     };
 
-    await onSubmit(payload);
+    await onSubmit({
+      project: payload,
+      templateId: mode === "create" ? state.templateId : null,
+      applyTemplateAfterCreate: mode === "create" ? state.applyTemplateAfterCreate : false,
+    });
   }
 
   return (
@@ -216,6 +238,58 @@ export function ProjectEditor({
       </div>
 
       <form className="project-form" onSubmit={handleSubmit}>
+        {mode === "create" ? (
+          <section className="detail-section">
+            <p className="section-label">模板</p>
+            <label className="form-field">
+              <span>项目模板</span>
+              <select
+                value={state.templateId}
+                onChange={(event) => updateField("templateId", event.target.value as ProjectTemplateId)}
+                disabled={busy}
+              >
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedTemplate ? (
+              <>
+                <div className="callout-box">
+                  <strong>{selectedTemplate.summary}</strong>
+                  <br />
+                  {selectedTemplate.description}
+                  <br />
+                  <strong>记忆：</strong> {selectedTemplate.memoryMode}
+                  <br />
+                  <strong>Sandbox：</strong> {selectedTemplate.sandbox.mode} / {selectedTemplate.sandbox.backend} /{" "}
+                  {selectedTemplate.sandbox.scope} / {selectedTemplate.sandbox.workspaceAccess}
+                </div>
+                <div className="callout-box callout-box-muted">
+                  {selectedTemplate.notes.map((note) => (
+                    <div key={note}>{note}</div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="callout-box callout-box-muted">
+                当前没有可用模板，先按普通项目写入注册表。
+              </div>
+            )}
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                checked={state.applyTemplateAfterCreate}
+                onChange={(event) => updateField("applyTemplateAfterCreate", event.target.checked)}
+                disabled={busy || selectedTemplate === null}
+              />
+              <span>创建后立即把模板写进目标项目的 `openclaw.json`</span>
+            </label>
+          </section>
+        ) : null}
+
         <section className="detail-section">
           <p className="section-label">基础信息</p>
           <div className="form-grid">

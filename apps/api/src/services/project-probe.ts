@@ -1,6 +1,7 @@
 import net from "node:net";
 import { readProjectMemoryProfile } from "./project-memory-mode";
 import { readProjectModelProfile } from "./project-models";
+import { readProjectSandboxProfile } from "./project-sandbox";
 import type {
   ManagerAuthProfile,
   ProjectAuthProfile,
@@ -179,10 +180,11 @@ export async function buildProjectListResponse(
 ): Promise<ProjectListResponse> {
   const items = await Promise.all(
     registry.projects.map(async (project): Promise<ProjectListItem> => {
-      const [probe, model, memory] = await Promise.all([
+      const [probe, model, memory, sandbox] = await Promise.all([
         probeProjectRuntime(project),
         readProjectModelProfile(project),
         readProjectMemoryProfile(project),
+        readProjectSandboxProfile(project),
       ]);
 
       return {
@@ -199,6 +201,7 @@ export async function buildProjectListResponse(
         auth: buildAuthProfile(project, registry),
         model,
         memory,
+        sandbox,
         capabilities: project.capabilities,
         compatibility: project.compatibility,
       };

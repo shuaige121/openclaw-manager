@@ -8,6 +8,11 @@ export type ProjectActionName = "start" | "stop" | "restart";
 export type HistoryEntryKind = "project_action" | "bulk_action" | "project_registry";
 export type ProjectCompatibilityStatus = "incompatible" | "runtime_only" | "full";
 export type ProjectMemoryMode = "normal" | "locked" | "stateless";
+export type ProjectSandboxMode = "off" | "non-main" | "all";
+export type ProjectSandboxBackend = "docker" | "ssh" | "openshell";
+export type ProjectSandboxScope = "session" | "agent" | "shared";
+export type ProjectSandboxWorkspaceAccess = "none" | "ro" | "rw";
+export type ProjectTemplateId = "general" | "stateless" | "sandboxed";
 export type ProjectCompatibilityCheckName =
   | "lifecycle"
   | "gateway_probe"
@@ -79,6 +84,33 @@ export type ProjectMemoryProfile = {
   memoryFlushEnabled: boolean;
 };
 
+export type ProjectSandboxProfile = {
+  mode: ProjectSandboxMode;
+  backend: ProjectSandboxBackend;
+  scope: ProjectSandboxScope;
+  workspaceAccess: ProjectSandboxWorkspaceAccess;
+  dockerImage: string | null;
+  dockerNetwork: string | null;
+  toolAllow: string[];
+  toolDeny: string[];
+};
+
+export type ProjectTemplateDefinition = {
+  id: ProjectTemplateId;
+  name: string;
+  summary: string;
+  description: string;
+  recommendedTags: string[];
+  memoryMode: ProjectMemoryMode;
+  sandbox: {
+    mode: ProjectSandboxMode;
+    backend: ProjectSandboxBackend;
+    scope: ProjectSandboxScope;
+    workspaceAccess: ProjectSandboxWorkspaceAccess;
+  };
+  notes: string[];
+};
+
 export type ProjectListItem = {
   id: string;
   name: string;
@@ -93,6 +125,7 @@ export type ProjectListItem = {
   auth: ProjectAuthProfile;
   model: ProjectModelProfile;
   memory: ProjectMemoryProfile;
+  sandbox: ProjectSandboxProfile;
   capabilities: ProjectCapabilities;
   compatibility: ProjectCompatibilityProfile;
 };
@@ -141,6 +174,7 @@ export type ProjectRegistryView = {
   auth: ProjectAuthProfile;
   model: ProjectModelProfile;
   memory: ProjectMemoryProfile;
+  sandbox: ProjectSandboxProfile;
   compatibility: ProjectCompatibilityProfile;
 };
 
@@ -226,6 +260,30 @@ export type ProjectMemoryModeUpdateResponse = {
     durationMs: number;
   } | null;
   memory: ProjectMemoryProfile;
+  item: ProjectListItem | null;
+};
+
+export type ProjectTemplateListResponse = {
+  items: ProjectTemplateDefinition[];
+  generatedAt: string;
+};
+
+export type ProjectTemplateApplyResponse = {
+  ok: boolean;
+  projectId: string;
+  templateId: ProjectTemplateId;
+  restartTriggered: boolean;
+  result: {
+    ok: boolean;
+    command: string;
+    exitCode: number | null;
+    signal: string | null;
+    stdout: string;
+    stderr: string;
+    durationMs: number;
+  } | null;
+  memory: ProjectMemoryProfile;
+  sandbox: ProjectSandboxProfile;
   item: ProjectListItem | null;
 };
 

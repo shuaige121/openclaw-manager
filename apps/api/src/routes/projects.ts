@@ -4,10 +4,11 @@ import { ActionHistoryService } from "../services/action-history";
 import { executeProjectAction } from "../services/project-command-runner";
 import { readProjectMemoryProfile, updateProjectMemoryMode } from "../services/project-memory-mode";
 import { readProjectModelProfile, updateProjectPrimaryModel } from "../services/project-models";
+import { applyProjectTemplate, listProjectTemplates } from "../services/project-templates";
 import { scanProjectCompatibility } from "../services/project-compatibility";
 import { buildProjectListResponse, probeProjectRuntime } from "../services/project-probe";
 import { type ProjectRegistryService } from "../services/project-registry";
-import type { ProjectMemoryMode } from "../types/project";
+import type { ProjectMemoryMode, ProjectTemplateId } from "../types/project";
 
 type AsyncRouteHandler = (
   request: Request,
@@ -63,6 +64,29 @@ function parseMemoryModeUpdateBody(value: unknown): {
 
   return {
     mode,
+    restartIfRunning,
+  };
+}
+
+function parseTemplateApplyBody(value: unknown): {
+  templateId: ProjectTemplateId;
+  restartIfRunning: boolean;
+} {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new HttpError(400, "template apply body must be an object.");
+  }
+
+  const payload = value as Record<string, unknown>;
+  const templateId = payload.templateId;
+  if (templateId !== "general" && templateId !== "stateless" && templateId !== "sandboxed") {
+    throw new HttpError(400, 'templateId must be "general", "stateless", or "sandboxed".');
+  }
+
+  const restartIfRunning =
+    payload.restartIfRunning === undefined ? true : Boolean(payload.restartIfRunning);
+
+  return {
+    templateId,
     restartIfRunning,
   };
 }
@@ -130,6 +154,16 @@ export function createProjectsRouter(options: {
   );
 
   projectsRouter.get(
+    "/templates",
+    handleAsync(async (_request, response) => {
+      response.json({
+        items: listProjectTemplates(),
+        generatedAt: new Date().toISOString(),
+      });
+    }),
+  );
+
+  projectsRouter.get(
     "/:id",
     handleAsync(async (request, response) => {
       const registry = await registryService.readRegistry();
@@ -155,6 +189,7 @@ export function createProjectsRouter(options: {
           auth: item.auth,
           model: item.model,
           memory: item.memory,
+          sandbox: item.sandbox,
           compatibility: projectRecord.compatibility,
         },
         managerAuth: list.managerAuth,
@@ -263,6 +298,60 @@ export function createProjectsRouter(options: {
         restartTriggered: restartResult !== null,
         result: restartResult,
         memory,
+        item,
+      });
+    }),
+  );
+
+  projectsRouter.post(
+    "/:id/apply-template",
+    handleAsync(async (request, response) => {
+      const project = await registryService.getProject(request.params.id);
+      const { templateId, restartIfRunning } = parseTemplateApplyBody(request.body);
+      const applied = await applyProjectTemplate(project, templateId);
+      const runtime = await probeProjectRuntime(project);
+      const restartResult =
+        restartIfRunning && runtime.runtimeStatus === "running"
+          ? await executeProjectAction(project, "restart")
+          : null;
+      const ok = restartResult?.ok ?? true;
+
+      await actionHistoryService.appendEntry({
+        kind: "project_registry",
+        ok,
+        projects: [
+          {
+            id: project.id,
+            name: project.name,
+          },
+        ],
+        summary: `${project.name} 已套用模板 ${applied.template.name}`,
+        detail: [
+          `Applied template ${applied.template.id}.`,
+          `Memory mode is now ${applied.memory.mode}; sandbox mode is now ${applied.sandbox.mode}.`,
+          restartResult
+            ? `Restart ${restartResult.ok ? "completed" : "failed"} in ${restartResult.durationMs}ms.`
+            : "Project was not running, so no restart was triggered.",
+        ].join(" "),
+        command: restartResult?.command ?? null,
+        stdout: restartResult?.stdout ?? null,
+        stderr: restartResult?.stderr ?? null,
+        durationMs: restartResult?.durationMs ?? null,
+        actionName: "template_apply",
+      });
+
+      const registry = await registryService.readRegistry();
+      const list = await buildProjectListResponse(registry);
+      const item = list.items.find((entry) => entry.id === project.id) ?? null;
+
+      response.json({
+        ok,
+        projectId: project.id,
+        templateId,
+        restartTriggered: restartResult !== null,
+        result: restartResult,
+        memory: applied.memory,
+        sandbox: applied.sandbox,
         item,
       });
     }),

@@ -16,6 +16,9 @@ import type {
   ProjectCompatibilityScanResponse,
   ProjectMemoryModeUpdateResponse,
   ProjectModelUpdateResponse,
+  ProjectTemplateApplyResponse,
+  ProjectTemplateDefinition,
+  ProjectTemplateListResponse,
   ProjectUpsertPayload,
   ProjectsResponse,
 } from "./types";
@@ -67,6 +70,7 @@ export default function App() {
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [historyData, setHistoryData] = useState<ActionHistoryResponse | null>(null);
+  const [templates, setTemplates] = useState<ProjectTemplateDefinition[]>([]);
   const [search, setSearch] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -84,22 +88,32 @@ export default function App() {
   const [compatibilityScanProjectId, setCompatibilityScanProjectId] = useState<string | null>(null);
   const [modelUpdateProjectId, setModelUpdateProjectId] = useState<string | null>(null);
   const [memoryUpdateProjectId, setMemoryUpdateProjectId] = useState<string | null>(null);
+  const [templateApplyProjectId, setTemplateApplyProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
 
-    async function loadProjects() {
+    async function loadProjectsWithTemplates() {
       setStatus("loading");
       setErrorMessage(null);
 
       try {
-        const [payload, history] = await Promise.all([
+        const [payload, templateCatalog, history] = await Promise.all([
           requestApi<ProjectsResponse>("/api/projects", {
             signal: controller.signal,
             headers: {
               Accept: "application/json",
             },
           }),
+          requestApi<ProjectTemplateListResponse>("/api/projects/templates", {
+            signal: controller.signal,
+            headers: {
+              Accept: "application/json",
+            },
+          }).catch(() => ({
+            items: [],
+            generatedAt: new Date().toISOString(),
+          })),
           requestApi<ActionHistoryResponse>("/api/actions?limit=40", {
             signal: controller.signal,
             headers: {
@@ -109,6 +123,7 @@ export default function App() {
         ]);
 
         setData(payload);
+        setTemplates(templateCatalog.items);
         setHistoryData(history);
         setStatus("ready");
       } catch (error) {
@@ -120,7 +135,7 @@ export default function App() {
       }
     }
 
-    void loadProjects();
+    void loadProjectsWithTemplates();
 
     return () => {
       controller.abort();
@@ -263,7 +278,11 @@ export default function App() {
     setBulkResult(null);
   }
 
-  async function submitProject(payload: ProjectUpsertPayload) {
+  async function submitProject(params: {
+    project: ProjectUpsertPayload;
+    templateId: "general" | "stateless" | "sandboxed" | null;
+    applyTemplateAfterCreate: boolean;
+  }) {
     setMutationState("saving");
     setEditorErrorMessage(null);
     setNotice(null);
@@ -276,25 +295,46 @@ export default function App() {
             Accept: "application/json",
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(params.project),
         });
+
+        if (params.applyTemplateAfterCreate && params.templateId) {
+          await requestApi<ProjectTemplateApplyResponse>(
+            `/api/projects/${response.projectId}/apply-template`,
+            {
+              method: "POST",
+              headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                templateId: params.templateId,
+                restartIfRunning: false,
+              }),
+            },
+          );
+        }
+
         setNotice({
           tone: "success",
-          text: `项目 ${response.projectId} 已写入注册表。`,
+          text:
+            params.applyTemplateAfterCreate && params.templateId
+              ? `项目 ${response.projectId} 已创建，并套用了 ${params.templateId} 模板。`
+              : `项目 ${response.projectId} 已写入注册表。`,
         });
         closeEditorPanel();
         reloadProjects(response.projectId);
         return;
       }
 
-      const projectId = editorProject?.id ?? payload.id;
+      const projectId = editorProject?.id ?? params.project.id;
       const response = await requestApi<{ ok: true; projectId: string }>(`/api/projects/${projectId}`, {
         method: "PATCH",
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(params.project),
       });
       setNotice({
         tone: "success",
@@ -306,6 +346,50 @@ export default function App() {
       setEditorErrorMessage(toErrorMessage(error));
     } finally {
       setMutationState("idle");
+    }
+  }
+
+  async function applyTemplateToProject(
+    projectId: string,
+    payload: {
+      templateId: "general" | "stateless" | "sandboxed";
+      restartIfRunning: boolean;
+    },
+  ) {
+    setTemplateApplyProjectId(projectId);
+    setNotice(null);
+
+    try {
+      const response = await requestApi<ProjectTemplateApplyResponse>(
+        `/api/projects/${projectId}/apply-template`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      const restartDetail = response.restartTriggered
+        ? response.result?.ok
+          ? "运行中的项目已经重启。"
+          : `重启失败：${response.result?.stderr || response.result?.stdout || "请查看动作历史。"}`
+        : "项目当前未运行，没有触发重启。";
+
+      setNotice({
+        tone: response.ok ? "success" : "error",
+        text: `${projectId} 已套用 ${response.templateId} 模板。${restartDetail}`,
+      });
+      reloadProjects(projectId);
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: toErrorMessage(error),
+      });
+    } finally {
+      setTemplateApplyProjectId(null);
     }
   }
 
@@ -520,6 +604,7 @@ export default function App() {
       <ProjectEditor
         mode="create"
         managerAuth={data?.managerAuth ?? null}
+        templates={templates}
         initialProject={null}
         busy={mutationState === "saving"}
         errorMessage={editorErrorMessage}
@@ -556,6 +641,7 @@ export default function App() {
         <ProjectEditor
           mode="edit"
           managerAuth={data?.managerAuth ?? null}
+          templates={templates}
           initialProject={editorProject}
           busy={mutationState === "saving"}
           errorMessage={editorErrorMessage}
@@ -589,12 +675,15 @@ export default function App() {
           scanningCompatibility={compatibilityScanProjectId === activeProject?.id}
           modelUpdating={modelUpdateProjectId === activeProject?.id}
           memoryUpdating={memoryUpdateProjectId === activeProject?.id}
+          templateApplying={templateApplyProjectId === activeProject?.id}
+          templates={templates}
           onEdit={openEditPanel}
           onDelete={deleteProject}
           onRunAction={runProjectAction}
           onScanCompatibility={scanProjectCompatibility}
           onUpdateModel={updateProjectModel}
           onUpdateMemoryMode={updateProjectMemoryMode}
+          onApplyTemplate={applyTemplateToProject}
         />
         <ActionHistoryPanel
           title={activeProject ? `${activeProject.name} 最近动作` : "全局最近动作"}

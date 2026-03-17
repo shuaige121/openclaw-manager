@@ -16,6 +16,11 @@ export type ProjectCompatibilityCheckName =
   | "skills"
   | "memory";
 export type ProjectMemoryMode = "normal" | "locked" | "stateless";
+export type ProjectSandboxMode = "off" | "non-main" | "all";
+export type ProjectSandboxBackend = "docker" | "ssh" | "openshell";
+export type ProjectSandboxScope = "session" | "agent" | "shared";
+export type ProjectSandboxWorkspaceAccess = "none" | "ro" | "rw";
+export type ProjectTemplateId = "general" | "stateless" | "sandboxed";
 
 export interface ProjectAuthProfile {
   mode: ProjectAuthMode;
@@ -85,6 +90,33 @@ export interface ProjectMemoryProfile {
   memoryFlushEnabled: boolean;
 }
 
+export interface ProjectSandboxProfile {
+  mode: ProjectSandboxMode;
+  backend: ProjectSandboxBackend;
+  scope: ProjectSandboxScope;
+  workspaceAccess: ProjectSandboxWorkspaceAccess;
+  dockerImage: string | null;
+  dockerNetwork: string | null;
+  toolAllow: string[];
+  toolDeny: string[];
+}
+
+export interface ProjectTemplateDefinition {
+  id: ProjectTemplateId;
+  name: string;
+  summary: string;
+  description: string;
+  recommendedTags: string[];
+  memoryMode: ProjectMemoryMode;
+  sandbox: {
+    mode: ProjectSandboxMode;
+    backend: ProjectSandboxBackend;
+    scope: ProjectSandboxScope;
+    workspaceAccess: ProjectSandboxWorkspaceAccess;
+  };
+  notes: string[];
+}
+
 export interface ProjectLifecycleCommands {
   startCommand: string;
   stopCommand: string;
@@ -138,6 +170,7 @@ export interface ProjectListItem {
   auth: ProjectAuthProfile;
   model: ProjectModelProfile;
   memory: ProjectMemoryProfile;
+  sandbox: ProjectSandboxProfile;
   capabilities: ProjectCapabilities;
   compatibility: ProjectCompatibilityProfile;
 }
@@ -160,6 +193,11 @@ export interface ProjectListResponse {
   managerAuth: ManagerAuthProfile;
   generatedAt: string;
   source: "registry";
+}
+
+export interface ProjectTemplateListResponse {
+  items: ProjectTemplateDefinition[];
+  generatedAt: string;
 }
 
 export interface CommandExecutionResult {
