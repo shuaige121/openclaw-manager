@@ -479,6 +479,42 @@ a {
   color: #ffe3e3;
 }
 
+.catalog-list {
+  display: grid;
+  gap: 10px;
+}
+
+.catalog-item {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(122, 162, 255, 0.05);
+}
+
+.catalog-item-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.catalog-item-title,
+.catalog-item-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.catalog-item-meta {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  word-break: break-word;
+}
+
 .project-form {
   display: grid;
   gap: 18px;

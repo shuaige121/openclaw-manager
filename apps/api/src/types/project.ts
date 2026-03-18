@@ -22,6 +22,8 @@ export type ProjectSandboxMode = "off" | "non-main" | "all";
 export type ProjectSandboxBackend = "docker" | "ssh" | "openshell";
 export type ProjectSandboxScope = "session" | "agent" | "shared";
 export type ProjectSandboxWorkspaceAccess = "none" | "ro" | "rw";
+export type ProjectHookSource = "internal";
+export type ProjectSkillSource = "bundled" | "managed" | "workspace" | "config_only";
 export type ProjectTemplateId = "general" | "stateless" | "sandboxed";
 
 export interface ProjectAuthProfile {
@@ -101,6 +103,36 @@ export interface ProjectSandboxProfile {
   dockerNetwork: string | null;
   toolAllow: string[];
   toolDeny: string[];
+}
+
+export interface ProjectHookEntry {
+  name: string;
+  enabled: boolean;
+  source: ProjectHookSource;
+}
+
+export interface ProjectHooksProfile {
+  entries: ProjectHookEntry[];
+  enabledCount: number;
+}
+
+export interface ProjectSkillCatalogEntry {
+  name: string;
+  source: ProjectSkillSource;
+  official: boolean;
+  path: string | null;
+}
+
+export interface ProjectConfiguredSkillEntry extends ProjectSkillCatalogEntry {
+  enabled: boolean;
+}
+
+export interface ProjectSkillsProfile {
+  configuredEntries: ProjectConfiguredSkillEntry[];
+  catalogEntries: ProjectSkillCatalogEntry[];
+  enabledCount: number;
+  officialCount: number;
+  customCount: number;
 }
 
 export interface ProjectTemplateDefinition {
@@ -185,6 +217,8 @@ export interface ProjectListItem {
   model: ProjectModelProfile;
   memory: ProjectMemoryProfile;
   sandbox: ProjectSandboxProfile;
+  hooks: ProjectHooksProfile;
+  skills: ProjectSkillsProfile;
   capabilities: ProjectCapabilities;
   compatibility: ProjectCompatibilityProfile;
 }

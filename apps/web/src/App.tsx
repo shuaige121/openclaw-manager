@@ -89,6 +89,7 @@ export default function App() {
   const [modelUpdateProjectId, setModelUpdateProjectId] = useState<string | null>(null);
   const [memoryUpdateProjectId, setMemoryUpdateProjectId] = useState<string | null>(null);
   const [templateApplyProjectId, setTemplateApplyProjectId] = useState<string | null>(null);
+  const [catalogActionKey, setCatalogActionKey] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -597,6 +598,90 @@ export default function App() {
     }
   }
 
+  async function manageProjectCatalogEntry(params: {
+    kind: "hook" | "skill";
+    projectId: string;
+    name: string;
+    mode: "enable" | "disable" | "remove";
+  }) {
+    const normalizedName = params.name.trim();
+    if (normalizedName.length === 0) {
+      setNotice({
+        tone: "error",
+        text: `${params.kind === "hook" ? "Hook" : "Skill"} 名称不能为空。`,
+      });
+      return;
+    }
+
+    const actionKey = `${params.kind}:${params.projectId}:${normalizedName}:${params.mode}`;
+    setCatalogActionKey(actionKey);
+    setNotice(null);
+
+    const payload: BulkActionExecutePayload =
+      params.kind === "hook"
+        ? params.mode === "remove"
+          ? {
+              action: "config",
+              projectIds: [params.projectId],
+              payload: {
+                mode: "delete",
+                path: `hooks.internal.entries.${normalizedName}`,
+              },
+            }
+          : {
+              action: "hooks",
+              projectIds: [params.projectId],
+              payload: {
+                mode: params.mode,
+                hookName: normalizedName,
+              },
+            }
+        : params.mode === "remove"
+          ? {
+              action: "config",
+              projectIds: [params.projectId],
+              payload: {
+                mode: "delete",
+                path: `skills.entries.${normalizedName}`,
+              },
+            }
+          : {
+              action: "skills",
+              projectIds: [params.projectId],
+              payload: {
+                mode: params.mode,
+                skillName: normalizedName,
+              },
+            };
+
+    try {
+      const response = await requestApi<BulkActionResponse>("/api/bulk/execute", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = response.results[0];
+      setNotice({
+        tone: result?.ok ? "success" : "error",
+        text:
+          result?.message ??
+          `${params.projectId} ${params.kind === "hook" ? "Hook" : "Skill"} 操作已提交。`,
+      });
+      reloadProjects(params.projectId);
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: toErrorMessage(error),
+      });
+    } finally {
+      setCatalogActionKey(null);
+    }
+  }
+
   let sidePanel;
 
   if (panelMode === "create") {
@@ -676,6 +761,7 @@ export default function App() {
           modelUpdating={modelUpdateProjectId === activeProject?.id}
           memoryUpdating={memoryUpdateProjectId === activeProject?.id}
           templateApplying={templateApplyProjectId === activeProject?.id}
+          catalogActionKey={catalogActionKey}
           templates={templates}
           onEdit={openEditPanel}
           onDelete={deleteProject}
@@ -684,6 +770,22 @@ export default function App() {
           onUpdateModel={updateProjectModel}
           onUpdateMemoryMode={updateProjectMemoryMode}
           onApplyTemplate={applyTemplateToProject}
+          onManageHook={(projectId, name, mode) =>
+            manageProjectCatalogEntry({
+              kind: "hook",
+              projectId,
+              name,
+              mode,
+            })
+          }
+          onManageSkill={(projectId, name, mode) =>
+            manageProjectCatalogEntry({
+              kind: "skill",
+              projectId,
+              name,
+              mode,
+            })
+          }
         />
         <ActionHistoryPanel
           title={activeProject ? `${activeProject.name} 最近动作` : "全局最近动作"}

@@ -192,6 +192,8 @@ export function createProjectsRouter(options: {
           model: item.model,
           memory: item.memory,
           sandbox: item.sandbox,
+          hooks: item.hooks,
+          skills: item.skills,
           compatibility: projectRecord.compatibility,
         },
         managerAuth: list.managerAuth,

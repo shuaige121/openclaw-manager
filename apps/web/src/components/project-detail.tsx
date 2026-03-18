@@ -20,6 +20,7 @@ type ProjectDetailProps = {
   modelUpdating: boolean;
   memoryUpdating: boolean;
   templateApplying: boolean;
+  catalogActionKey: string | null;
   templates: ProjectTemplateDefinition[];
   onEdit: (projectId: string) => void;
   onDelete: (projectId: string) => void;
@@ -33,6 +34,16 @@ type ProjectDetailProps = {
   onApplyTemplate: (
     projectId: string,
     payload: { templateId: ProjectTemplateId; restartIfRunning: boolean },
+  ) => void;
+  onManageHook: (
+    projectId: string,
+    hookName: string,
+    mode: "enable" | "disable" | "remove",
+  ) => void;
+  onManageSkill: (
+    projectId: string,
+    skillName: string,
+    mode: "enable" | "disable" | "remove",
   ) => void;
 };
 
@@ -95,6 +106,13 @@ const workspaceAccessLabel: Record<ProjectListItem["sandbox"]["workspaceAccess"]
   rw: "读写工作区",
 };
 
+const skillSourceLabel: Record<ProjectListItem["skills"]["catalogEntries"][number]["source"], string> = {
+  bundled: "官方",
+  managed: "共享",
+  workspace: "项目",
+  config_only: "仅配置",
+};
+
 function deriveTemplateId(project: ProjectListItem): ProjectTemplateId {
   if (project.memory.mode === "stateless" && project.sandbox.mode === "off") {
     return "stateless";
@@ -140,6 +158,7 @@ export function ProjectDetail({
   modelUpdating,
   memoryUpdating,
   templateApplying,
+  catalogActionKey,
   templates,
   onEdit,
   onDelete,
@@ -148,6 +167,8 @@ export function ProjectDetail({
   onUpdateModel,
   onUpdateMemoryMode,
   onApplyTemplate,
+  onManageHook,
+  onManageSkill,
 }: ProjectDetailProps) {
   const [modelRef, setModelRef] = useState("");
   const [restartIfRunning, setRestartIfRunning] = useState(true);
@@ -155,6 +176,8 @@ export function ProjectDetail({
   const [restartMemoryIfRunning, setRestartMemoryIfRunning] = useState(true);
   const [templateId, setTemplateId] = useState<ProjectTemplateId>("general");
   const [restartTemplateIfRunning, setRestartTemplateIfRunning] = useState(true);
+  const [draftHookName, setDraftHookName] = useState("");
+  const [draftSkillName, setDraftSkillName] = useState("");
 
   useEffect(() => {
     if (!project) {
@@ -164,6 +187,8 @@ export function ProjectDetail({
       setRestartMemoryIfRunning(true);
       setTemplateId("general");
       setRestartTemplateIfRunning(true);
+      setDraftHookName("");
+      setDraftSkillName("");
       return;
     }
 
@@ -173,6 +198,8 @@ export function ProjectDetail({
     setRestartMemoryIfRunning(true);
     setTemplateId(deriveTemplateId(project));
     setRestartTemplateIfRunning(true);
+    setDraftHookName("");
+    setDraftSkillName("");
   }, [project]);
 
   if (!project) {
@@ -189,6 +216,15 @@ export function ProjectDetail({
 
   const selectedTemplate =
     templates.find((template) => template.id === templateId) ?? templates[0] ?? null;
+  const projectId = project.id;
+  const officialSkillPreview = project.skills.catalogEntries
+    .filter((entry) => entry.official)
+    .slice(0, 6)
+    .map((entry) => entry.name);
+
+  function isCatalogActionBusy(kind: "hook" | "skill", name: string, mode: "enable" | "disable" | "remove") {
+    return catalogActionKey === `${kind}:${projectId}:${name}:${mode}`;
+  }
 
   return (
     <aside className="detail-panel">
@@ -422,6 +458,213 @@ export function ProjectDetail({
             {memoryUpdating ? "保存中..." : "保存记忆策略"}
           </button>
         </div>
+      </section>
+
+      <section className="detail-section">
+        <p className="section-label">Hooks</p>
+        <div className="callout-box">
+          <strong>已配置：</strong> {project.hooks.entries.length} 个
+          <br />
+          <strong>已启用：</strong> {project.hooks.enabledCount} 个
+        </div>
+        <div className="form-grid">
+          <label className="form-field">
+            <span>Hook 名称</span>
+            <input
+              value={draftHookName}
+              onChange={(event) => setDraftHookName(event.target.value)}
+              placeholder="daily-summary"
+              disabled={catalogActionKey !== null}
+            />
+          </label>
+        </div>
+        <div className="panel-action-row">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onManageHook(project.id, draftHookName, "enable")}
+            disabled={catalogActionKey !== null || draftHookName.trim().length === 0}
+          >
+            启用 Hook
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onManageHook(project.id, draftHookName, "disable")}
+            disabled={catalogActionKey !== null || draftHookName.trim().length === 0}
+          >
+            禁用 Hook
+          </button>
+          <button
+            type="button"
+            className="ghost-button ghost-button-danger"
+            onClick={() => onManageHook(project.id, draftHookName, "remove")}
+            disabled={catalogActionKey !== null || draftHookName.trim().length === 0}
+          >
+            移除条目
+          </button>
+        </div>
+        {project.hooks.entries.length > 0 ? (
+          <div className="catalog-list">
+            {project.hooks.entries.map((entry) => (
+              <article key={entry.name} className="catalog-item">
+                <div className="catalog-item-header">
+                  <div className="catalog-item-title">
+                    <strong>{entry.name}</strong>
+                    <span className={`status-pill ${entry.enabled ? "tone-ok" : "tone-muted"}`}>
+                      {entry.enabled ? "enabled" : "disabled"}
+                    </span>
+                    <span className="tag-pill">internal</span>
+                  </div>
+                  <div className="catalog-item-actions">
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => onManageHook(project.id, entry.name, "enable")}
+                      disabled={catalogActionKey !== null || entry.enabled}
+                    >
+                      {isCatalogActionBusy("hook", entry.name, "enable") ? "处理中..." : "启用"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => onManageHook(project.id, entry.name, "disable")}
+                      disabled={catalogActionKey !== null || !entry.enabled}
+                    >
+                      {isCatalogActionBusy("hook", entry.name, "disable") ? "处理中..." : "禁用"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button ghost-button-danger"
+                      onClick={() => onManageHook(project.id, entry.name, "remove")}
+                      disabled={catalogActionKey !== null}
+                    >
+                      {isCatalogActionBusy("hook", entry.name, "remove") ? "处理中..." : "移除"}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="callout-box callout-box-muted">
+            当前项目还没有任何 Hook 条目，直接在上面填名字就能创建并启用。
+          </div>
+        )}
+      </section>
+
+      <section className="detail-section">
+        <p className="section-label">Skills</p>
+        <div className="callout-box">
+          <strong>已配置：</strong> {project.skills.configuredEntries.length} 个
+          <br />
+          <strong>已启用：</strong> {project.skills.enabledCount} 个
+          <br />
+          <strong>官方技能：</strong> {project.skills.officialCount} 个
+          <br />
+          <strong>非官方技能：</strong> {project.skills.customCount} 个
+        </div>
+        {officialSkillPreview.length > 0 ? (
+          <div className="callout-box callout-box-muted">
+            <strong>官方技能示例</strong>
+            <br />
+            {officialSkillPreview.join(", ")}
+          </div>
+        ) : null}
+        <div className="form-grid">
+          <label className="form-field">
+            <span>Skill 名称</span>
+            <input
+              list={`skill-catalog-${project.id}`}
+              value={draftSkillName}
+              onChange={(event) => setDraftSkillName(event.target.value)}
+              placeholder="github"
+              disabled={catalogActionKey !== null}
+            />
+            <datalist id={`skill-catalog-${project.id}`}>
+              {project.skills.catalogEntries.map((entry) => (
+                <option key={entry.name} value={entry.name}>
+                  {skillSourceLabel[entry.source]}
+                </option>
+              ))}
+            </datalist>
+          </label>
+        </div>
+        <div className="panel-action-row">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onManageSkill(project.id, draftSkillName, "enable")}
+            disabled={catalogActionKey !== null || draftSkillName.trim().length === 0}
+          >
+            启用 Skill
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onManageSkill(project.id, draftSkillName, "disable")}
+            disabled={catalogActionKey !== null || draftSkillName.trim().length === 0}
+          >
+            禁用 Skill
+          </button>
+          <button
+            type="button"
+            className="ghost-button ghost-button-danger"
+            onClick={() => onManageSkill(project.id, draftSkillName, "remove")}
+            disabled={catalogActionKey !== null || draftSkillName.trim().length === 0}
+          >
+            移除条目
+          </button>
+        </div>
+        {project.skills.configuredEntries.length > 0 ? (
+          <div className="catalog-list">
+            {project.skills.configuredEntries.map((entry) => (
+              <article key={entry.name} className="catalog-item">
+                <div className="catalog-item-header">
+                  <div className="catalog-item-title">
+                    <strong>{entry.name}</strong>
+                    <span className={`status-pill ${entry.enabled ? "tone-ok" : "tone-muted"}`}>
+                      {entry.enabled ? "enabled" : "disabled"}
+                    </span>
+                    <span className="tag-pill">{entry.official ? "official" : "custom"}</span>
+                    <span className="tag-pill">{skillSourceLabel[entry.source]}</span>
+                  </div>
+                  <div className="catalog-item-actions">
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => onManageSkill(project.id, entry.name, "enable")}
+                      disabled={catalogActionKey !== null || entry.enabled}
+                    >
+                      {isCatalogActionBusy("skill", entry.name, "enable") ? "处理中..." : "启用"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => onManageSkill(project.id, entry.name, "disable")}
+                      disabled={catalogActionKey !== null || !entry.enabled}
+                    >
+                      {isCatalogActionBusy("skill", entry.name, "disable") ? "处理中..." : "禁用"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button ghost-button-danger"
+                      onClick={() => onManageSkill(project.id, entry.name, "remove")}
+                      disabled={catalogActionKey !== null}
+                    >
+                      {isCatalogActionBusy("skill", entry.name, "remove") ? "处理中..." : "移除"}
+                    </button>
+                  </div>
+                </div>
+                {entry.path ? <div className="catalog-item-meta">{entry.path}</div> : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="callout-box callout-box-muted">
+            当前项目还没有任何 Skill 条目。可以直接输入名字启用，也可以从 datalist 里选官方或本地 Skill。
+          </div>
+        )}
       </section>
 
       <section className="detail-section">

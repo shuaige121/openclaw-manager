@@ -1,5 +1,7 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import http from "node:http";
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 import {
   createApiTestContext,
@@ -53,6 +55,77 @@ test("project registry CRUD routes append history entries", async (context) => {
   assert.deepEqual(
     history.body.items.map((item: { actionName: string }) => item.actionName),
     ["project_delete", "project_update", "project_create"],
+  );
+});
+
+test("project list exposes hook config and skill catalog metadata", async (context) => {
+  const api = await createApiTestContext(context, {
+    projects: [],
+  });
+  const project = await createProjectFixture(api.tempDir, {
+    id: "catalog-target",
+    gatewayPort: 19936,
+    config: {
+      gateway: {
+        port: 19936,
+      },
+      hooks: {
+        internal: {
+          enabled: true,
+          entries: {
+            "daily-summary": {
+              enabled: true,
+            },
+          },
+        },
+      },
+      skills: {
+        entries: {
+          github: {
+            enabled: true,
+          },
+          "private-helper": {
+            enabled: false,
+          },
+        },
+      },
+    },
+  });
+
+  await mkdir(path.join(project.paths.rootPath, "skills", "github"), {
+    recursive: true,
+  });
+  await writeFile(path.join(project.paths.rootPath, "skills", "github", "SKILL.md"), "# github\n", "utf8");
+  await mkdir(path.join(project.paths.workspacePath, "skills", "private-helper"), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(project.paths.workspacePath, "skills", "private-helper", "SKILL.md"),
+    "# private-helper\n",
+    "utf8",
+  );
+
+  await api.request.post("/api/projects").send(project).expect(201);
+
+  const response = await api.request.get("/api/projects").expect(200);
+  const item = response.body.items[0];
+
+  assert.equal(item.hooks.enabledCount, 1);
+  assert.deepEqual(item.hooks.entries.map((entry: { name: string }) => entry.name), ["daily-summary"]);
+  assert.equal(item.skills.enabledCount, 1);
+  assert.equal(item.skills.officialCount, 1);
+  assert.equal(item.skills.configuredEntries.length, 2);
+  assert.ok(item.skills.customCount >= 1);
+  assert.deepEqual(
+    item.skills.configuredEntries.map((entry: { name: string; official: boolean; enabled: boolean }) => [
+      entry.name,
+      entry.official,
+      entry.enabled,
+    ]),
+    [
+      ["github", true, true],
+      ["private-helper", false, false],
+    ],
   );
 });
 

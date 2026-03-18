@@ -1,4 +1,5 @@
 import net from "node:net";
+import { readProjectHooksProfile, readProjectSkillsProfile } from "./project-hooks-skills";
 import { readProjectMemoryProfile } from "./project-memory-mode";
 import { readProjectModelProfile } from "./project-models";
 import { readProjectSandboxProfile } from "./project-sandbox";
@@ -180,11 +181,13 @@ export async function buildProjectListResponse(
 ): Promise<ProjectListResponse> {
   const items = await Promise.all(
     registry.projects.map(async (project): Promise<ProjectListItem> => {
-      const [probe, model, memory, sandbox] = await Promise.all([
+      const [probe, model, memory, sandbox, hooks, skills] = await Promise.all([
         probeProjectRuntime(project),
         readProjectModelProfile(project),
         readProjectMemoryProfile(project),
         readProjectSandboxProfile(project),
+        readProjectHooksProfile(project),
+        readProjectSkillsProfile(project),
       ]);
 
       return {
@@ -202,6 +205,8 @@ export async function buildProjectListResponse(
         model,
         memory,
         sandbox,
+        hooks,
+        skills,
         capabilities: project.capabilities,
         compatibility: project.compatibility,
       };

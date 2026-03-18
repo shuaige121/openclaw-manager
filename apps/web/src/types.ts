@@ -14,6 +14,8 @@ export type ProjectSandboxMode = "off" | "non-main" | "all";
 export type ProjectSandboxBackend = "docker" | "ssh" | "openshell";
 export type ProjectSandboxScope = "session" | "agent" | "shared";
 export type ProjectSandboxWorkspaceAccess = "none" | "ro" | "rw";
+export type ProjectHookSource = "internal";
+export type ProjectSkillSource = "bundled" | "managed" | "workspace" | "config_only";
 export type ProjectTemplateId = "general" | "stateless" | "sandboxed";
 export type ProjectCompatibilityCheckName =
   | "lifecycle"
@@ -97,6 +99,36 @@ export type ProjectSandboxProfile = {
   toolDeny: string[];
 };
 
+export type ProjectHookEntry = {
+  name: string;
+  enabled: boolean;
+  source: ProjectHookSource;
+};
+
+export type ProjectHooksProfile = {
+  entries: ProjectHookEntry[];
+  enabledCount: number;
+};
+
+export type ProjectSkillCatalogEntry = {
+  name: string;
+  source: ProjectSkillSource;
+  official: boolean;
+  path: string | null;
+};
+
+export type ProjectConfiguredSkillEntry = ProjectSkillCatalogEntry & {
+  enabled: boolean;
+};
+
+export type ProjectSkillsProfile = {
+  configuredEntries: ProjectConfiguredSkillEntry[];
+  catalogEntries: ProjectSkillCatalogEntry[];
+  enabledCount: number;
+  officialCount: number;
+  customCount: number;
+};
+
 export type ProjectTemplateDefinition = {
   id: ProjectTemplateId;
   name: string;
@@ -128,6 +160,8 @@ export type ProjectListItem = {
   model: ProjectModelProfile;
   memory: ProjectMemoryProfile;
   sandbox: ProjectSandboxProfile;
+  hooks: ProjectHooksProfile;
+  skills: ProjectSkillsProfile;
   capabilities: ProjectCapabilities;
   compatibility: ProjectCompatibilityProfile;
 };
@@ -189,6 +223,8 @@ export type ProjectRegistryView = {
   model: ProjectModelProfile;
   memory: ProjectMemoryProfile;
   sandbox: ProjectSandboxProfile;
+  hooks: ProjectHooksProfile;
+  skills: ProjectSkillsProfile;
   compatibility: ProjectCompatibilityProfile;
 };
 
