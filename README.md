@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/banner.svg" alt="OpenClaw Control Panel" width="100%"/>
+<img src="assets/banner.png" alt="OpenClaw Control Panel" width="100%"/>
 
 <br/>
 
@@ -36,7 +36,7 @@ A **worldline** is the path a particle traces through spacetime — unique, cont
 
 <div align="center">
 <br/>
-<img src="assets/architecture.svg" alt="Architecture" width="100%"/>
+<img src="assets/architecture.png" alt="Architecture" width="100%"/>
 <br/><br/>
 </div>
 
