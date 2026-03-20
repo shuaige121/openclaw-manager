@@ -55,8 +55,8 @@ type ProjectDetailProps = {
 };
 
 const bulkDescriptions: Record<BulkIntent, string> = {
-  hooks: "对选中机器人批量启用或禁用 Hook。",
-  skills: "对选中机器人批量启用或禁用 Skill。",
+  hooks: "对选中机器人批量启用或禁用钩子。",
+  skills: "对选中机器人批量启用或禁用技能。",
   memory: "对选中机器人批量追加或删除记忆内容。",
   config: "对选中机器人批量修改配置。",
 };
@@ -73,14 +73,19 @@ const compatibilityLabel: Record<ProjectListItem["compatibility"]["status"], str
   incompatible: "高风险",
 };
 
+const authStrategyLabel: Record<ProjectListItem["auth"]["strategy"], string> = {
+  token: "令牌",
+  password: "密码",
+};
+
 const checkLabel: Record<ProjectListItem["compatibility"]["checks"][number]["name"], string> = {
-  lifecycle: "Lifecycle",
-  gateway_probe: "Gateway Probe",
-  web_ui: "Web UI",
-  config_patch: "Config Patch",
-  hooks: "Hooks",
-  skills: "Skills",
-  memory: "Memory",
+  lifecycle: "生命周期",
+  gateway_probe: "网关探测",
+  web_ui: "网页界面",
+  config_patch: "配置补丁",
+  hooks: "钩子",
+  skills: "技能",
+  memory: "记忆",
 };
 
 const memoryModeLabel: Record<ProjectMemoryMode, string> = {
@@ -90,9 +95,9 @@ const memoryModeLabel: Record<ProjectMemoryMode, string> = {
 };
 
 const memoryModeDescription: Record<ProjectMemoryMode, string> = {
-  normal: "可读可写。允许记忆插件、自动 memory flush，以及后续沉淀长期记忆。",
-  locked: "只读记忆。允许读已有记忆，但不再新增 session memory 或 compaction memory。",
-  stateless: "完全白纸。既不读记忆，也不写记忆，适合客服机器人或严格无状态 bot。",
+  normal: "可读可写。允许记忆插件、自动记忆刷新，以及后续沉淀长期记忆。",
+  locked: "只读记忆。允许读取已有记忆，但不再新增会话记忆或压缩记忆。",
+  stateless: "完全白纸。既不读记忆，也不写记忆，适合客服机器人或严格无状态机器人。",
 };
 
 const sandboxModeLabel: Record<ProjectListItem["sandbox"]["mode"], string> = {
@@ -103,8 +108,14 @@ const sandboxModeLabel: Record<ProjectListItem["sandbox"]["mode"], string> = {
 
 const sandboxScopeLabel: Record<ProjectListItem["sandbox"]["scope"], string> = {
   session: "每会话一个沙箱",
-  agent: "每 Agent 一个沙箱",
+  agent: "每个代理一个沙箱",
   shared: "所有会话共享",
+};
+
+const sandboxBackendLabel: Record<ProjectListItem["sandbox"]["backend"], string> = {
+  docker: "Docker",
+  ssh: "SSH",
+  openshell: "OpenShell",
 };
 
 const workspaceAccessLabel: Record<ProjectListItem["sandbox"]["workspaceAccess"], string> = {
@@ -119,6 +130,19 @@ const skillSourceLabel: Record<ProjectListItem["skills"]["catalogEntries"][numbe
   workspace: "本地",
   config_only: "仅配置",
 };
+
+function formatModelName(ref: string): string {
+  const name = ref.includes("/") ? ref.split("/").pop()! : ref;
+  const map: Record<string, string> = {
+    "claude-opus-4-6": "Claude Opus",
+    "claude-sonnet-4-6": "Claude Sonnet",
+    "claude-haiku-4-5": "Claude Haiku",
+    "gpt-4": "GPT-4",
+    "gpt-4o": "GPT-4o",
+    "gpt-5": "GPT-5",
+  };
+  return map[name] ?? name;
+}
 
 function deriveTemplateId(project: ProjectListItem): ProjectTemplateId {
   if (project.memory.mode === "stateless" && project.sandbox.mode === "off") {
@@ -151,7 +175,7 @@ function formatLastSeen(value: string | null): string {
 }
 
 function formatModelLabel(modelRef: string, alias?: string | null): string {
-  return alias ? `${alias} · ${modelRef}` : modelRef;
+  return alias ? `${alias} · ${formatModelName(modelRef)}` : formatModelName(modelRef);
 }
 
 export function ProjectDetail({
@@ -258,8 +282,8 @@ export function ProjectDetail({
               <h2>{project.name}</h2>
             </div>
             <div className="project-badges">
-              <span className="tag-pill">Port {project.gatewayPort}</span>
-              <span className="tag-pill">{project.auth.strategy}</span>
+              <span className="tag-pill">端口 {project.gatewayPort}</span>
+              <span className="tag-pill">{authStrategyLabel[project.auth.strategy]}</span>
               <span className={`status-pill ${compatibilityTone[project.compatibility.status]}`}>
                 {compatibilityLabel[project.compatibility.status]}
               </span>
@@ -373,7 +397,7 @@ export function ProjectDetail({
               <dt>{checkLabel[check.name]}</dt>
               <dd>
                 <span className={`status-pill ${check.supported ? "tone-ok" : "tone-warn"}`}>
-                  {check.supported ? "ok" : "partial"}
+                  {check.supported ? "支持" : "部分支持"}
                 </span>{" "}
                 {check.message}
               </dd>
@@ -391,8 +415,8 @@ export function ProjectDetail({
               <br />
               <strong>通过率：</strong> {activeSmokeResult.summary.passed}/{activeSmokeResult.summary.total}
               <br />
-              <strong>Provider / Model：</strong> {activeSmokeResult.summary.provider ?? "unknown"} /{" "}
-              {activeSmokeResult.summary.model ?? "unknown"}
+              <strong>提供方 / 模型：</strong> {activeSmokeResult.summary.provider ?? "未知"} /{" "}
+              {activeSmokeResult.summary.model ? formatModelName(activeSmokeResult.summary.model) : "未知"}
             </div>
             <div className="catalog-list">
               {activeSmokeResult.results.map((result) => (
@@ -401,7 +425,7 @@ export function ProjectDetail({
                     <div className="catalog-item-title">
                       <strong>{result.label}</strong>
                       <span className={`status-pill ${result.ok ? "tone-ok" : "tone-bad"}`}>
-                        {result.ok ? "pass" : "fail"}
+                        {result.ok ? "通过" : "失败"}
                       </span>
                       <span className="tag-pill">{result.durationMs}ms</span>
                       {result.toolHint ? <span className="tag-pill">{result.toolHint}</span> : null}
@@ -445,20 +469,25 @@ export function ProjectDetail({
       <section className="detail-section">
         <p className="section-label">默认模型</p>
         <div className="callout-box">
-          <strong>当前默认：</strong> {project.model.primaryRef ?? "未显式设置"}<br />
+          <strong>当前默认：</strong>{" "}
+          {project.model.primaryRef ? formatModelName(project.model.primaryRef) : "未显式设置"}
+          <br />
           <strong>最近实测：</strong>{" "}
           {project.model.lastObservedRef
-            ? `${project.model.lastObservedProvider ?? "unknown"} / ${project.model.lastObservedRef}`
+            ? `${project.model.lastObservedProvider ?? "未知"} / ${formatModelName(project.model.lastObservedRef)}`
             : "还没有测试数据"}
           <br />
           <strong>实测时间：</strong> {formatLastSeen(project.model.lastObservedAt)}
           <br />
           <strong>模型目录：</strong>{" "}
           {project.model.catalogMode === "allowlist"
-            ? `allowlist（${project.model.configuredModels.length} 个已配置模型）`
-            : "open（未限制 allowlist，可直接手填 provider/model）"}
+            ? `白名单（${project.model.configuredModels.length} 个已配置模型）`
+            : "开放（未限制白名单，可直接手填模型引用）"}
           <br />
-          <strong>Fallback：</strong> {project.model.fallbackRefs.length > 0 ? project.model.fallbackRefs.join(", ") : "未设置"}
+          <strong>兜底模型：</strong>{" "}
+          {project.model.fallbackRefs.length > 0
+            ? project.model.fallbackRefs.map((ref) => formatModelName(ref)).join(", ")
+            : "未设置"}
         </div>
         {project.model.configuredModels.length > 0 ? (
           <label className="form-field">
@@ -485,11 +514,11 @@ export function ProjectDetail({
           </label>
         ) : null}
         <label className="form-field">
-          <span>provider/model</span>
+          <span>模型引用</span>
           <input
             value={modelRef}
             onChange={(event) => setModelRef(event.target.value)}
-            placeholder="anthropic/claude-opus-4-6"
+            placeholder="例如 claude-opus-4-6"
             disabled={modelUpdating}
           />
         </label>
@@ -520,9 +549,9 @@ export function ProjectDetail({
           <strong>当前模式：</strong> {memoryModeLabel[project.memory.mode]}<br />
           <strong>读取记忆：</strong> {project.memory.canReadMemory ? "允许" : "关闭"}<br />
           <strong>写入记忆：</strong> {project.memory.canWriteMemory ? "允许" : "关闭"}<br />
-          <strong>Memory Plugin：</strong> {project.memory.effectivePluginSlot ?? "none"}<br />
-          <strong>Session Memory Hook：</strong> {project.memory.sessionMemoryHookEnabled ? "启用" : "关闭"}<br />
-          <strong>Memory Flush：</strong> {project.memory.memoryFlushEnabled ? "启用" : "关闭"}
+          <strong>记忆插件：</strong> {project.memory.effectivePluginSlot ?? "未设置"}<br />
+          <strong>会话记忆钩子：</strong> {project.memory.sessionMemoryHookEnabled ? "启用" : "关闭"}<br />
+          <strong>记忆刷新：</strong> {project.memory.memoryFlushEnabled ? "启用" : "关闭"}
         </div>
         <label className="form-field">
           <span>记忆模式</span>
@@ -559,7 +588,7 @@ export function ProjectDetail({
       </section>
 
       <section className="detail-section">
-        <p className="section-label">Hooks</p>
+        <p className="section-label">钩子</p>
         <div className="callout-box">
           <strong>已配置：</strong> {project.hooks.entries.length} 个
           <br />
@@ -567,7 +596,7 @@ export function ProjectDetail({
         </div>
         <div className="form-grid">
           <label className="form-field">
-            <span>Hook 名称</span>
+            <span>钩子名称</span>
             <input
               value={draftHookName}
               onChange={(event) => setDraftHookName(event.target.value)}
@@ -583,7 +612,7 @@ export function ProjectDetail({
             onClick={() => onManageHook(project.id, draftHookName, "enable")}
             disabled={catalogActionKey !== null || draftHookName.trim().length === 0}
           >
-            启用 Hook
+            启用钩子
           </button>
           <button
             type="button"
@@ -591,7 +620,7 @@ export function ProjectDetail({
             onClick={() => onManageHook(project.id, draftHookName, "disable")}
             disabled={catalogActionKey !== null || draftHookName.trim().length === 0}
           >
-            禁用 Hook
+            禁用钩子
           </button>
           <button
             type="button"
@@ -610,9 +639,9 @@ export function ProjectDetail({
                   <div className="catalog-item-title">
                     <strong>{entry.name}</strong>
                     <span className={`status-pill ${entry.enabled ? "tone-ok" : "tone-muted"}`}>
-                      {entry.enabled ? "enabled" : "disabled"}
+                      {entry.enabled ? "已启用" : "已禁用"}
                     </span>
-                    <span className="tag-pill">internal</span>
+                    <span className="tag-pill">内置</span>
                   </div>
                   <div className="catalog-item-actions">
                     <button
@@ -646,13 +675,13 @@ export function ProjectDetail({
           </div>
         ) : (
           <div className="callout-box callout-box-muted">
-            还没有任何 Hook 条目，直接在上面填名字就能创建并启用。
+            还没有任何钩子条目，直接在上面填名字就能创建并启用。
           </div>
         )}
       </section>
 
       <section className="detail-section">
-        <p className="section-label">Skills</p>
+        <p className="section-label">技能</p>
         <div className="callout-box">
           <strong>已配置：</strong> {project.skills.configuredEntries.length} 个
           <br />
@@ -671,7 +700,7 @@ export function ProjectDetail({
         ) : null}
         <div className="form-grid">
           <label className="form-field">
-            <span>Skill 名称</span>
+            <span>技能名称</span>
             <input
               list={`skill-catalog-${project.id}`}
               value={draftSkillName}
@@ -695,7 +724,7 @@ export function ProjectDetail({
             onClick={() => onManageSkill(project.id, draftSkillName, "enable")}
             disabled={catalogActionKey !== null || draftSkillName.trim().length === 0}
           >
-            启用 Skill
+            启用技能
           </button>
           <button
             type="button"
@@ -703,7 +732,7 @@ export function ProjectDetail({
             onClick={() => onManageSkill(project.id, draftSkillName, "disable")}
             disabled={catalogActionKey !== null || draftSkillName.trim().length === 0}
           >
-            禁用 Skill
+            禁用技能
           </button>
           <button
             type="button"
@@ -722,9 +751,9 @@ export function ProjectDetail({
                   <div className="catalog-item-title">
                     <strong>{entry.name}</strong>
                     <span className={`status-pill ${entry.enabled ? "tone-ok" : "tone-muted"}`}>
-                      {entry.enabled ? "enabled" : "disabled"}
+                      {entry.enabled ? "已启用" : "已禁用"}
                     </span>
-                    <span className="tag-pill">{entry.official ? "official" : "custom"}</span>
+                    <span className="tag-pill">{entry.official ? "官方" : "自定义"}</span>
                     <span className="tag-pill">{skillSourceLabel[entry.source]}</span>
                   </div>
                   <div className="catalog-item-actions">
@@ -760,28 +789,28 @@ export function ProjectDetail({
           </div>
         ) : (
           <div className="callout-box callout-box-muted">
-            还没有任何 Skill 条目。可以直接输入名字启用，也可以从列表里选择。
+            还没有任何技能条目。可以直接输入名字启用，也可以从列表里选择。
           </div>
         )}
       </section>
 
       <section className="detail-section">
-        <p className="section-label">Sandbox</p>
+        <p className="section-label">沙盒</p>
         <div className="callout-box">
           <strong>当前模式：</strong> {sandboxModeLabel[project.sandbox.mode]}<br />
-          <strong>Backend：</strong> {project.sandbox.backend}<br />
-          <strong>Scope：</strong> {sandboxScopeLabel[project.sandbox.scope]}<br />
-          <strong>Workspace Access：</strong> {workspaceAccessLabel[project.sandbox.workspaceAccess]}<br />
-          <strong>Docker Network：</strong> {project.sandbox.dockerNetwork ?? "默认值"}<br />
-          <strong>Docker Image：</strong> {project.sandbox.dockerImage ?? "OpenClaw 默认镜像"}
+          <strong>后端：</strong> {sandboxBackendLabel[project.sandbox.backend]}<br />
+          <strong>作用域：</strong> {sandboxScopeLabel[project.sandbox.scope]}<br />
+          <strong>工作区访问：</strong> {workspaceAccessLabel[project.sandbox.workspaceAccess]}<br />
+          <strong>Docker 网络：</strong> {project.sandbox.dockerNetwork ?? "默认值"}<br />
+          <strong>Docker 镜像：</strong> {project.sandbox.dockerImage ?? "OpenClaw 默认镜像"}
         </div>
         {project.sandbox.toolAllow.length > 0 || project.sandbox.toolDeny.length > 0 ? (
           <div className="callout-box callout-box-muted">
-            <strong>Sandbox Tool Policy</strong>
+            <strong>沙盒工具策略</strong>
             <br />
-            allow: {project.sandbox.toolAllow.length > 0 ? project.sandbox.toolAllow.join(", ") : "默认"}
+            允许：{project.sandbox.toolAllow.length > 0 ? project.sandbox.toolAllow.join(", ") : "默认"}
             <br />
-            deny: {project.sandbox.toolDeny.length > 0 ? project.sandbox.toolDeny.join(", ") : "默认"}
+            禁止：{project.sandbox.toolDeny.length > 0 ? project.sandbox.toolDeny.join(", ") : "默认"}
           </div>
         ) : null}
       </section>
@@ -809,10 +838,11 @@ export function ProjectDetail({
               <br />
               {selectedTemplate.description}
               <br />
-              <strong>模板记忆：</strong> {selectedTemplate.memoryMode}
+              <strong>模板记忆：</strong> {memoryModeLabel[selectedTemplate.memoryMode]}
               <br />
-              <strong>模板 Sandbox：</strong> {selectedTemplate.sandbox.mode} / {selectedTemplate.sandbox.backend} /{" "}
-              {selectedTemplate.sandbox.scope} / {selectedTemplate.sandbox.workspaceAccess}
+              <strong>模板沙盒：</strong> {sandboxModeLabel[selectedTemplate.sandbox.mode]} /{" "}
+              {sandboxBackendLabel[selectedTemplate.sandbox.backend]} / {sandboxScopeLabel[selectedTemplate.sandbox.scope]} /{" "}
+              {workspaceAccessLabel[selectedTemplate.sandbox.workspaceAccess]}
             </div>
             <div className="callout-box callout-box-muted">
               {selectedTemplate.notes.map((note) => (
@@ -853,15 +883,15 @@ export function ProjectDetail({
         <p className="section-label">路径</p>
         <dl className="detail-list">
           <div>
-            <dt>Root</dt>
+            <dt>根目录</dt>
             <dd>{project.paths.rootPath}</dd>
           </div>
           <div>
-            <dt>Config</dt>
+            <dt>配置文件</dt>
             <dd>{project.paths.configPath}</dd>
           </div>
           <div>
-            <dt>Workspace</dt>
+            <dt>工作区</dt>
             <dd>{project.paths.workspacePath}</dd>
           </div>
         </dl>

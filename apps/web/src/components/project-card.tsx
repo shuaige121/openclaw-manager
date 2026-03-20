@@ -190,27 +190,27 @@ export function ProjectCard({
 
           <dl className="project-meta">
             <div>
-              <dt>Auth</dt>
+              <dt>认证</dt>
               <dd>{project.auth.label}</dd>
             </div>
             <div>
-              <dt>Model</dt>
+              <dt>模型</dt>
               <dd>{formatObservedModel(project)}</dd>
             </div>
             <div>
-              <dt>Memory</dt>
+              <dt>记忆</dt>
               <dd>{project.memory.mode}</dd>
             </div>
             <div>
-              <dt>Smoke</dt>
+              <dt>测试</dt>
               <dd>{formatSmokeSummary(project)}</dd>
             </div>
             <div>
-              <dt>Sandbox</dt>
+              <dt>沙盒</dt>
               <dd>{project.sandbox.mode}</dd>
             </div>
             <div>
-              <dt>Compatibility</dt>
+              <dt>兼容</dt>
               <dd>
                 <span className={`status-pill ${compatibilityTone[project.compatibility.status]}`}>
                   {compatibilityLabel[project.compatibility.status]}

@@ -60,7 +60,7 @@ type EditorState = {
   bulkConfigPatch: boolean;
 };
 
-type ChannelType = "none" | "telegram" | "wecom" | "feishu";
+type ChannelType = "none" | "telegram" | "wecom" | "feishu" | "whatsapp";
 
 type SimpleCreatorState = {
   botName: string;
@@ -185,6 +185,7 @@ function toTagArray(value: string): string[] {
 
 const CHANNEL_OPTIONS: { value: ChannelType; label: string }[] = [
   { value: "telegram", label: "Telegram Bot" },
+  { value: "whatsapp", label: "WhatsApp" },
   { value: "wecom", label: "企业微信" },
   { value: "feishu", label: "飞书" },
   { value: "none", label: "仅本地使用（无消息通道）" },
@@ -438,6 +439,12 @@ function SimpleCreatorForm({
                   disabled={busy}
                 />
               </label>
+            </div>
+          ) : null}
+
+          {simple.channelType === "whatsapp" ? (
+            <div className="callout-box muted-copy">
+              创建后将显示二维码，用手机 WhatsApp 扫码连接
             </div>
           ) : null}
 
@@ -857,6 +864,8 @@ function channelDescription(channelType: ChannelType): string {
   switch (channelType) {
     case "telegram":
       return "通过 Telegram Bot 接入的机器人";
+    case "whatsapp":
+      return "通过 WhatsApp 接入的机器人";
     case "wecom":
       return "通过企业微信接入的机器人";
     case "feishu":
@@ -870,6 +879,8 @@ function channelTags(channelType: ChannelType): string[] {
   switch (channelType) {
     case "telegram":
       return ["telegram", "bot"];
+    case "whatsapp":
+      return ["whatsapp", "bot"];
     case "wecom":
       return ["wecom", "bot"];
     case "feishu":
