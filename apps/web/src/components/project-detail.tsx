@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { ChannelConfig } from "./channel-config";
 import type {
   BulkIntent,
   ManagerAuthProfile,
   ProjectActionName,
   ProjectListItem,
   ProjectMemoryMode,
+  ProjectSmokeTestResponse,
   ProjectTemplateDefinition,
   ProjectTemplateId,
 } from "../types";
@@ -17,15 +19,18 @@ type ProjectDetailProps = {
   deleting: boolean;
   activeAction: ProjectActionName | null;
   scanningCompatibility: boolean;
+  smokeTesting: boolean;
   modelUpdating: boolean;
   memoryUpdating: boolean;
   templateApplying: boolean;
   catalogActionKey: string | null;
+  smokeTestResult: ProjectSmokeTestResponse | null;
   templates: ProjectTemplateDefinition[];
   onEdit: (projectId: string) => void;
   onDelete: (projectId: string) => void;
   onRunAction: (projectId: string, action: ProjectActionName) => void;
   onScanCompatibility: (projectId: string) => void;
+  onRunSmokeTest: (projectId: string) => void;
   onUpdateModel: (projectId: string, payload: { modelRef: string; restartIfRunning: boolean }) => void;
   onUpdateMemoryMode: (
     projectId: string,
@@ -50,7 +55,7 @@ type ProjectDetailProps = {
 const bulkDescriptions: Record<BulkIntent, string> = {
   hooks: "对选中项目批量启用、禁用或分发 hooks.internal.entries.* 相关改动。",
   skills: "对选中项目批量分发 skill 目录，并 patch skills.entries.* 或 agent skill allowlist。",
-  memory: "对选中项目批量追加或删除 manager 写入的记忆块，不直接改 SQLite 索引。",
+  memory: "对选中项目批量追加或删除 Control Panel 写入的记忆块，不直接改 SQLite 索引。",
   config: "对选中项目批量做安全的配置 patch，适合少量高频字段。",
 };
 
@@ -155,15 +160,18 @@ export function ProjectDetail({
   deleting,
   activeAction,
   scanningCompatibility,
+  smokeTesting,
   modelUpdating,
   memoryUpdating,
   templateApplying,
   catalogActionKey,
+  smokeTestResult,
   templates,
   onEdit,
   onDelete,
   onRunAction,
   onScanCompatibility,
+  onRunSmokeTest,
   onUpdateModel,
   onUpdateMemoryMode,
   onApplyTemplate,
@@ -178,6 +186,7 @@ export function ProjectDetail({
   const [restartTemplateIfRunning, setRestartTemplateIfRunning] = useState(true);
   const [draftHookName, setDraftHookName] = useState("");
   const [draftSkillName, setDraftSkillName] = useState("");
+  const [showChannelConfig, setShowChannelConfig] = useState(false);
 
   useEffect(() => {
     if (!project) {
@@ -201,6 +210,10 @@ export function ProjectDetail({
     setDraftHookName("");
     setDraftSkillName("");
   }, [project]);
+
+  useEffect(() => {
+    setShowChannelConfig(false);
+  }, [project?.id]);
 
   if (!project) {
     return (
@@ -226,6 +239,9 @@ export function ProjectDetail({
     return catalogActionKey === `${kind}:${projectId}:${name}:${mode}`;
   }
 
+  const activeSmokeResult =
+    smokeTestResult?.projectId === project.id ? smokeTestResult : project.lastSmokeTest;
+
   return (
     <aside className="detail-panel">
       <header className="detail-header">
@@ -246,13 +262,13 @@ export function ProjectDetail({
 
       <div className="detail-actions">
         <a href={project.endpoints.controlUiUrl} target="_blank" rel="noreferrer">
-          打开项目 Control UI
+          打开项目 Control UI &#8599;
         </a>
         <a href={project.endpoints.gatewayUrl} target="_blank" rel="noreferrer">
-          打开 Gateway
+          打开 Gateway &#8599;
         </a>
         <a href={project.endpoints.healthUrl} target="_blank" rel="noreferrer">
-          打开 Health
+          打开 Health &#8599;
         </a>
       </div>
 
@@ -294,6 +310,14 @@ export function ProjectDetail({
         </button>
         <button
           type="button"
+          className="ghost-button"
+          onClick={() => onRunSmokeTest(project.id)}
+          disabled={smokeTesting || activeAction !== null}
+        >
+          {smokeTesting ? "测试中..." : "运行 Smoke Test"}
+        </button>
+        <button
+          type="button"
           className="ghost-button ghost-button-danger"
           onClick={() => onDelete(project.id)}
           disabled={deleting}
@@ -301,6 +325,25 @@ export function ProjectDetail({
           {deleting ? "删除中..." : "删除项目"}
         </button>
       </div>
+
+      <section className="detail-section">
+        <div className="panel-action-row">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => setShowChannelConfig((value) => !value)}
+            aria-expanded={showChannelConfig}
+            aria-controls={`channel-config-panel-${projectId}`}
+          >
+            {showChannelConfig ? "Channel 配置 ▲" : "Channel 配置 ▼"}
+          </button>
+        </div>
+        {showChannelConfig ? (
+          <div id={`channel-config-panel-${projectId}`}>
+            <ChannelConfig projectId={projectId} />
+          </div>
+        ) : null}
+      </section>
 
       <section className="detail-section">
         <p className="section-label">兼容性扫描</p>
@@ -330,10 +373,48 @@ export function ProjectDetail({
       </section>
 
       <section className="detail-section">
+        <p className="section-label">Smoke Test</p>
+        {activeSmokeResult ? (
+          <>
+            <div className="callout-box">
+              <strong>最近一次：</strong> {formatLastSeen(activeSmokeResult.finishedAt)}
+              <br />
+              <strong>通过率：</strong> {activeSmokeResult.summary.passed}/{activeSmokeResult.summary.total}
+              <br />
+              <strong>Provider / Model：</strong> {activeSmokeResult.summary.provider ?? "unknown"} /{" "}
+              {activeSmokeResult.summary.model ?? "unknown"}
+            </div>
+            <div className="catalog-list">
+              {activeSmokeResult.results.map((result) => (
+                <article key={result.id} className="catalog-item">
+                  <div className="catalog-item-header">
+                    <div className="catalog-item-title">
+                      <strong>{result.label}</strong>
+                      <span className={`status-pill ${result.ok ? "tone-ok" : "tone-bad"}`}>
+                        {result.ok ? "pass" : "fail"}
+                      </span>
+                      <span className="tag-pill">{result.durationMs}ms</span>
+                      {result.toolHint ? <span className="tag-pill">{result.toolHint}</span> : null}
+                    </div>
+                  </div>
+                  <div className="catalog-item-meta">{result.outputText || "没有文本输出"}</div>
+                  {result.error ? <div className="catalog-item-meta">{result.error}</div> : null}
+                </article>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="callout-box callout-box-muted">
+            还没有跑过 smoke test。它会问 4 个固定问题，检查模型识别、工具调用和上下文承接。
+          </div>
+        )}
+      </section>
+
+      <section className="detail-section">
         <p className="section-label">Gateway / Auth</p>
         <dl className="detail-list">
           <div>
-            <dt>默认 manager auth</dt>
+            <dt>默认 Control Panel auth</dt>
             <dd>{managerAuth?.label ?? "未配置"}</dd>
           </div>
           <div>
@@ -355,6 +436,13 @@ export function ProjectDetail({
         <p className="section-label">默认模型</p>
         <div className="callout-box">
           <strong>当前默认：</strong> {project.model.primaryRef ?? "未显式设置"}<br />
+          <strong>最近实测：</strong>{" "}
+          {project.model.lastObservedRef
+            ? `${project.model.lastObservedProvider ?? "unknown"} / ${project.model.lastObservedRef}`
+            : "还没有 smoke test 数据"}
+          <br />
+          <strong>实测时间：</strong> {formatLastSeen(project.model.lastObservedAt)}
+          <br />
           <strong>模型目录：</strong>{" "}
           {project.model.catalogMode === "allowlist"
             ? `allowlist（${project.model.configuredModels.length} 个已配置模型）`
@@ -773,7 +861,7 @@ export function ProjectDetail({
         <p className="section-label">单个与批量</p>
         <div className="callout-box">
           <strong>单项目深控：</strong> 直接跳它自己的 Control UI。<br />
-          <strong>批量动作：</strong> 由 manager 对选中项目统一执行，不去同时嵌多个 UI。
+          <strong>批量动作：</strong> 由 Control Panel 对选中项目统一执行，不去同时嵌多个 UI。
         </div>
         <div className="callout-box callout-box-muted">
           OpenClaw Control UI 默认禁止 iframe 内嵌，所以第一版仍以新标签打开为主。
