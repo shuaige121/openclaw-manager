@@ -142,6 +142,13 @@ a {
   color: var(--ink-soft);
 }
 
+.project-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .hero-lede {
   display: none;
 }
