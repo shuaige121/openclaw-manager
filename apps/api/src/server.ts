@@ -10,6 +10,7 @@ import { HttpError } from "./lib/http-error";
 import { createIpAllowlistMiddleware } from "./lib/ip-allowlist";
 import { WEB_DIST_DIR } from "./paths";
 import { createActionsRouter } from "./routes/actions";
+import { createAgentsRouter } from "./routes/agents";
 import { createBulkRouter } from "./routes/bulk";
 import { healthRouter } from "./routes/health";
 import { createChannelsRouter } from "./routes/channels";
@@ -53,6 +54,10 @@ export function createServer(options: CreateServerOptions = {}) {
   app.use("/api/actions", createActionsRouter({ actionHistoryService }));
   app.use("/api/health", healthRouter);
   app.use("/api/bulk", createBulkRouter({ registryService, actionHistoryService }));
+  app.use(
+    "/api/projects",
+    createAgentsRouter({ registryService, actionHistoryService }),
+  );
   app.use(
     "/api/projects",
     createChannelsRouter({ registryService, actionHistoryService }),

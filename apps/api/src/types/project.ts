@@ -1,3 +1,5 @@
+import type { AgentInfo } from "../services/project-agents";
+
 export type ProjectRuntimeStatus = "running" | "starting" | "stopped" | "error";
 export type ProjectHealthStatus = "healthy" | "degraded" | "unknown" | "unhealthy";
 export type ProjectAuthMode = "inherit_manager" | "custom";
@@ -242,6 +244,7 @@ export interface ProjectListItem {
   sandbox: ProjectSandboxProfile;
   hooks: ProjectHooksProfile;
   skills: ProjectSkillsProfile;
+  agents?: AgentInfo[];
   capabilities: ProjectCapabilities;
   compatibility: ProjectCompatibilityProfile;
   configIssues?: ConfigValidationIssueRef[];

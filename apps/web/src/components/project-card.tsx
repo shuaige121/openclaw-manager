@@ -1,4 +1,5 @@
 import type { MouseEvent } from "react";
+import { AgentList } from "./agent-list";
 import { ProjectDetail } from "./project-detail";
 import type {
   BulkIntent,
@@ -229,6 +230,8 @@ export function ProjectCard({
             </div>
           ) : null}
 
+          <AgentList agents={project.agents ?? []} />
+
           <div className="project-actions">
             <a href={project.endpoints.controlUiUrl} target="_blank" rel="noreferrer">
               打开控制台 &#8599;
@@ -263,6 +266,7 @@ export function ProjectCard({
             onApplyTemplate={onApplyTemplate}
             onManageHook={onManageHook}
             onManageSkill={onManageSkill}
+            showAgentList={false}
             inline
           />
         </div>

@@ -16,6 +16,21 @@ export type ProjectSandboxScope = "session" | "agent" | "shared";
 export type ProjectSandboxWorkspaceAccess = "none" | "ro" | "rw";
 export type ProjectHookSource = "internal";
 export type ProjectSkillSource = "bundled" | "managed" | "workspace" | "config_only";
+export interface AgentInfo {
+  id: string;
+  name: string;
+  emoji: string;
+  isDefault: boolean;
+  model: string;
+  memoryMode: string;
+  sandboxMode: string;
+  tools: {
+    allow: string[];
+    deny: string[];
+  };
+  workspace: string;
+  boundChannels: string[];
+}
 export type ProjectTemplateId =
   | "general"
   | "stateless"
@@ -165,6 +180,7 @@ export type ProjectListItem = {
   id: string;
   name: string;
   description: string;
+  agents?: AgentInfo[];
   runtimeStatus: ProjectRuntimeStatus;
   healthStatus: ProjectHealthStatus;
   gatewayPort: number;

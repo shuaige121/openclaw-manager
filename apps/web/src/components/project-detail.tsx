@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AgentList } from "./agent-list";
 import { ChannelConfig } from "./channel-config";
 import type {
   BulkIntent,
@@ -50,6 +51,7 @@ type ProjectDetailProps = {
     skillName: string,
     mode: "enable" | "disable" | "remove",
   ) => void;
+  showAgentList?: boolean;
   /** When true, renders without the outer <aside> wrapper (for inline use in expanded card). */
   inline?: boolean;
 };
@@ -203,6 +205,7 @@ export function ProjectDetail({
   onApplyTemplate,
   onManageHook,
   onManageSkill,
+  showAgentList = true,
   inline,
 }: ProjectDetailProps) {
   const [modelRef, setModelRef] = useState("");
@@ -274,6 +277,8 @@ export function ProjectDetail({
 
   const detailContent = (
     <>
+      {showAgentList ? <AgentList agents={project.agents ?? []} /> : null}
+
       {!inline ? (
         <>
           <header className="detail-header">
