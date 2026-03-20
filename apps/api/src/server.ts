@@ -12,6 +12,7 @@ import { WEB_DIST_DIR } from "./paths";
 import { createActionsRouter } from "./routes/actions";
 import { createBulkRouter } from "./routes/bulk";
 import { healthRouter } from "./routes/health";
+import { createChannelsRouter } from "./routes/channels";
 import { createProjectActionsRouter } from "./routes/project-actions";
 import { createProjectsRouter } from "./routes/projects";
 import { ActionHistoryService } from "./services/action-history";
@@ -52,6 +53,10 @@ export function createServer(options: CreateServerOptions = {}) {
   app.use("/api/actions", createActionsRouter({ actionHistoryService }));
   app.use("/api/health", healthRouter);
   app.use("/api/bulk", createBulkRouter({ registryService, actionHistoryService }));
+  app.use(
+    "/api/projects",
+    createChannelsRouter({ registryService, actionHistoryService }),
+  );
   app.use(
     "/api/projects/:id/actions",
     createProjectActionsRouter({ registryService, actionHistoryService }),

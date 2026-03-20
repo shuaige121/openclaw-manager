@@ -47,7 +47,7 @@ const app = createServer({
 const managerTelegramBotConfig = readManagerTelegramBotConfig(process.env);
 
 app.listen(port, host, () => {
-  console.log(`OpenClaw manager API listening on http://${host}:${port}`);
+  console.log(`OpenClaw Control Panel API listening on http://${host}:${port}`);
 
   if (managerTelegramBotConfig) {
     const botService = new ManagerTelegramBotService({

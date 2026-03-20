@@ -273,11 +273,11 @@ export function ProjectEditor({
       </header>
 
       <p className="muted-copy">
-        这里只改 manager 注册表，不替代单项目 OpenClaw Control UI。创建后就会进入项目总览卡片。
+        这里只改 Control Panel 注册表，不替代单项目 OpenClaw Control UI。创建后就会进入项目总览卡片。
       </p>
 
       <div className="callout-box">
-        <strong>默认 manager auth：</strong> {managerAuth?.label ?? "未配置"}
+        <strong>默认 Control Panel auth：</strong> {managerAuth?.label ?? "未配置"}
         <br />
         <strong>项目 auth：</strong>{" "}
         {state.authMode === "inherit_manager" ? "继承默认" : "项目自定义"}
@@ -458,7 +458,7 @@ export function ProjectEditor({
                 onChange={(event) => updateField("authMode", event.target.value as ProjectAuthMode)}
                 disabled={busy}
               >
-                <option value="inherit_manager">继承 manager 默认 auth</option>
+                <option value="inherit_manager">继承 Control Panel 默认 auth</option>
                 <option value="custom">项目自定义 auth</option>
               </select>
             </label>
@@ -511,7 +511,7 @@ export function ProjectEditor({
                 onChange={(event) => updateField("lifecycleMode", event.target.value as ProjectLifecycleMode)}
                 disabled={busy}
               >
-                <option value="managed_openclaw">Manager 托管 OpenClaw</option>
+                <option value="managed_openclaw">Control Panel 托管 OpenClaw</option>
                 <option value="custom_commands">自定义命令</option>
               </select>
             </label>
@@ -549,7 +549,7 @@ export function ProjectEditor({
                   />
                 </label>
                 <label className="form-field form-field-full">
-                  <span>Node Path（留空用 manager 当前 Node）</span>
+                  <span>Node Path（留空用 Control Panel 当前 Node）</span>
                   <input
                     value={state.lifecycleNodePath}
                     onChange={(event) => updateField("lifecycleNodePath", event.target.value)}
@@ -569,7 +569,7 @@ export function ProjectEditor({
                   <span>启动时附加 `--allow-unconfigured`</span>
                 </label>
                 <div className="callout-box callout-box-muted">
-                  manager 会直接用 `gateway run` 在后台起一个独立 OpenClaw 进程，并自己维护 pid 和日志。
+                  Control Panel 会直接用 `gateway run` 在后台起一个独立 OpenClaw 进程，并自己维护 pid 和日志。
                 </div>
               </>
             ) : (

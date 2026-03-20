@@ -48,7 +48,7 @@ const PROJECT_TEMPLATE_CATALOG: ProjectTemplateDefinition[] = [
     },
     notes: [
       "会把记忆模式切到 stateless。",
-      "manager 的批量 memory 写入会被后端拒绝。",
+      "控制台的批量 memory 写入会被后端拒绝。",
     ],
   },
   {

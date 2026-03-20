@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw-manager/web",
+  "name": "@openclaw/control-panel-web",
   "private": true,
   "version": "0.1.0",
   "type": "module",

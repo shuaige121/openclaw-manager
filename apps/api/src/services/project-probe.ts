@@ -212,6 +212,7 @@ export async function buildProjectListResponse(
         readProjectHooksProfile(project),
         readProjectSkillsProfile(project),
       ]);
+      const lastSmokeTest = project.lastSmokeTest;
 
       return {
         id: project.id,
@@ -225,7 +226,12 @@ export async function buildProjectListResponse(
         paths: project.paths,
         endpoints: buildProjectEndpoints(project),
         auth: buildAuthProfile(project, registry),
-        model,
+        model: {
+          ...model,
+          lastObservedProvider: lastSmokeTest?.summary.provider ?? null,
+          lastObservedRef: lastSmokeTest?.summary.model ?? null,
+          lastObservedAt: lastSmokeTest?.finishedAt ?? null,
+        },
         memory,
         sandbox,
         hooks,
@@ -233,6 +239,7 @@ export async function buildProjectListResponse(
         capabilities: project.capabilities,
         compatibility: project.compatibility,
         configIssues: probe.configIssues,
+        lastSmokeTest,
       };
     }),
   );

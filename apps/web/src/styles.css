@@ -11,13 +11,16 @@
     radial-gradient(circle at top right, rgba(212, 138, 63, 0.2), transparent 24%),
     linear-gradient(180deg, #0b1020 0%, #0f172d 48%, #101828 100%);
   --page-max-width: 1440px;
+  --bg-base: rgba(11, 17, 32, 0.58);
+  --bg-card: rgba(19, 29, 56, 0.92);
+  --ink: #edf2ff;
   --surface: rgba(15, 23, 45, 0.82);
   --surface-strong: rgba(19, 29, 56, 0.92);
   --surface-muted: rgba(23, 34, 61, 0.62);
   --border: rgba(147, 176, 255, 0.16);
   --border-strong: rgba(147, 176, 255, 0.28);
-  --ink-soft: #9aa7c2;
-  --ink-muted: #7a88a5;
+  --ink-soft: #b0bdd6;
+  --ink-muted: #8b949e;
   --accent: #7aa2ff;
   --accent-warm: #f0a65e;
   --ok: #6fe3a1;
@@ -74,13 +77,17 @@ a {
 .hero {
   display: flex;
   justify-content: space-between;
-  gap: 20px;
-  padding: 24px 28px;
-  border-radius: 28px;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 24px;
+  border-radius: 18px;
 }
 
 .hero-copy {
-  max-width: 760px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
 }
 
 .eyebrow,
@@ -96,6 +103,14 @@ a {
   color: var(--accent);
 }
 
+.eyebrow {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
 .hero h1,
 .workspace-panel h2,
 .bulk-toolbar h2,
@@ -108,9 +123,14 @@ a {
 }
 
 .hero h1 {
-  max-width: 15ch;
-  font-size: clamp(2.4rem, 4vw, 4.4rem);
-  line-height: 0.96;
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.3;
+  font-weight: 500;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hero-lede,
@@ -123,15 +143,20 @@ a {
 }
 
 .hero-lede {
-  margin-top: 14px;
-  max-width: 720px;
-  font-size: 1.04rem;
+  display: none;
 }
 
 .hero-actions {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.hero-actions .primary-button,
+.hero-actions .ghost-button {
+  padding: 8px 14px;
+  font-size: 0.88rem;
 }
 
 .primary-button,
@@ -281,8 +306,8 @@ a {
 
 .search-input {
   display: grid;
-  gap: 8px;
-  min-width: 280px;
+  gap: 6px;
+  width: 100%;
   color: var(--ink-soft);
 }
 
@@ -308,6 +333,12 @@ a {
   align-content: start;
 }
 
+.project-column {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
 .project-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -325,9 +356,15 @@ a {
     background 160ms ease;
 }
 
-.project-card:hover,
+.project-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
 .project-card-active {
   border-color: var(--border-strong);
+  border-left: 3px solid #5b9aff;
+  background: rgba(82, 124, 255, 0.08);
   transform: translateY(-1px);
 }
 
@@ -406,31 +443,44 @@ a {
 }
 
 .tone-ok {
-  color: var(--ok);
-  background: rgba(111, 227, 161, 0.1);
+  color: #7fffb2;
+  background: rgba(111, 227, 161, 0.14);
 }
 
 .tone-warn {
-  color: var(--warn);
-  background: rgba(246, 200, 111, 0.12);
+  color: #ffd97a;
+  background: rgba(246, 200, 111, 0.16);
 }
 
 .tone-bad {
-  color: var(--bad);
-  background: rgba(255, 140, 140, 0.12);
+  color: #ffa0a0;
+  background: rgba(255, 140, 140, 0.16);
 }
 
 .tone-muted {
-  color: var(--ink-soft);
-  background: rgba(122, 136, 165, 0.12);
+  color: #b0bdd6;
+  background: rgba(122, 136, 165, 0.14);
 }
 
 .project-actions a,
 .detail-actions a {
   border-radius: 999px;
   padding: 10px 14px;
-  background: rgba(122, 162, 255, 0.08);
+  background: rgba(122, 162, 255, 0.12);
   color: #dce6ff;
+  border: 1px solid rgba(122, 162, 255, 0.2);
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.project-actions a:hover,
+.detail-actions a:hover {
+  background: rgba(122, 162, 255, 0.22);
+  border-color: rgba(122, 162, 255, 0.38);
+  transform: translateY(-1px);
 }
 
 .panel-action-row {
@@ -677,6 +727,17 @@ a {
 
   .hero {
     flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hero-copy {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .hero h1 {
+    white-space: normal;
   }
 
   .hero-actions,

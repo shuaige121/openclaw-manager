@@ -203,6 +203,62 @@ test("managed OpenClaw lifecycle starts and stops a detached gateway process", a
   );
 });
 
+test("project smoke test route runs fixed prompts and records history", async (context) => {
+  const api = await createApiTestContext(context, {
+    projects: [],
+  });
+  const fakeCliPath = await createFakeOpenClawCli(api.tempDir);
+  const project = await createProjectFixture(api.tempDir, {
+    id: "smoke-target",
+    gatewayPort: 19938,
+    lifecycle: {
+      mode: "managed_openclaw",
+      nodePath: process.execPath,
+      cliPath: fakeCliPath,
+      bind: "loopback",
+      allowUnconfigured: true,
+      startupTimeoutMs: 4000,
+    },
+  });
+
+  await api.request.post("/api/projects").send(project).expect(201);
+  await api.request.post("/api/projects/smoke-target/actions/start").expect(200);
+
+  const response = await api.request.post("/api/projects/smoke-target/smoke-test").expect(200);
+
+  assert.equal(response.body.ok, true);
+  assert.equal(response.body.summary.passed, 4);
+  assert.equal(response.body.summary.total, 4);
+  assert.equal(response.body.summary.provider, "anthropic");
+  assert.equal(response.body.summary.model, "claude-opus-4-6");
+  assert.deepEqual(
+    response.body.results.map((entry: { id: string; ok: boolean }) => [entry.id, entry.ok]),
+    [
+      ["model_identity", true],
+      ["tool_exec_time", true],
+      ["tool_web_fetch", true],
+      ["context_recall", true],
+    ],
+  );
+  assert.match(response.body.results[1].toolHint, /exec/i);
+  assert.match(response.body.results[2].toolHint, /web_fetch/i);
+
+  const list = await api.request.get("/api/projects").expect(200);
+  const item = list.body.items.find((entry: { id: string }) => entry.id === "smoke-target");
+
+  assert.ok(item);
+  assert.equal(item.lastSmokeTest.summary.passed, 4);
+  assert.equal(item.lastSmokeTest.summary.model, "claude-opus-4-6");
+  assert.equal(item.model.lastObservedProvider, "anthropic");
+  assert.equal(item.model.lastObservedRef, "claude-opus-4-6");
+  assert.equal(typeof item.model.lastObservedAt, "string");
+
+  const history = await api.request.get("/api/actions?projectId=smoke-target&limit=5").expect(200);
+  assert.equal(history.body.items[0].actionName, "smoke_test");
+  assert.match(history.body.items[0].summary, /4\/4/);
+  assert.match(history.body.items[0].stdout, /网页抓取工具/);
+});
+
 test("project model route writes config, extends allowlist, and restarts running projects", async (context) => {
   const api = await createApiTestContext(context, {
     projects: [],
@@ -641,6 +697,91 @@ test("bulk action route updates files and records bulk history", async (context)
   assert.match(history.body.items[0].summary, /Memory append block bulk-history-block/);
   assert.equal(history.body.items[1].kind, "bulk_action");
   assert.match(history.body.items[1].summary, /Hook daily-summary -> enable/);
+});
+
+test("bulk action route supports skill toggles and config path deletion", async (context) => {
+  const api = await createApiTestContext(context, {
+    projects: [],
+  });
+  const project = await createProjectFixture(api.tempDir, {
+    id: "config-target",
+    gatewayPort: 19937,
+    config: {
+      gateway: {
+        port: 19937,
+      },
+      hooks: {
+        internal: {
+          enabled: true,
+          entries: {
+            "daily-summary": {
+              enabled: true,
+            },
+          },
+        },
+      },
+      skills: {
+        entries: {
+          github: {
+            enabled: true,
+          },
+        },
+      },
+    },
+  });
+
+  await api.request.post("/api/projects").send(project).expect(201);
+
+  await api.request
+    .post("/api/bulk/execute")
+    .send({
+      action: "skills",
+      projectIds: ["config-target"],
+      payload: {
+        mode: "disable",
+        skillName: "github",
+      },
+    })
+    .expect(200);
+
+  await api.request
+    .post("/api/bulk/execute")
+    .send({
+      action: "config",
+      projectIds: ["config-target"],
+      payload: {
+        mode: "delete",
+        path: "hooks.internal.entries.daily-summary",
+      },
+    })
+    .expect(200);
+
+  await api.request
+    .post("/api/bulk/execute")
+    .send({
+      action: "config",
+      projectIds: ["config-target"],
+      payload: {
+        mode: "delete",
+        path: "skills.entries.github",
+      },
+    })
+    .expect(200);
+
+  const config = await api.readProjectConfig("config-target");
+  const hooks = expectJsonObject(config.hooks);
+  const internal = expectJsonObject(hooks.internal);
+  const entries = expectJsonObject(internal.entries);
+  const skills = expectJsonObject(config.skills);
+  const skillEntries = expectJsonObject(skills.entries);
+
+  assert.equal("daily-summary" in entries, false);
+  assert.equal("github" in skillEntries, false);
+
+  const history = await api.request.get("/api/actions?projectId=config-target&limit=5").expect(200);
+  assert.equal(history.body.items[0].actionName, "bulk_config");
+  assert.equal(history.body.items[1].actionName, "bulk_config");
+  assert.equal(history.body.items[2].actionName, "bulk_skills");
 });
 
 test("compatibility scan route classifies partial projects and persists the result", async (context) => {

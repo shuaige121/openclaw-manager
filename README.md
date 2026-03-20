@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/banner.svg" alt="OpenClaw Manager" width="100%"/>
+<img src="assets/banner.svg" alt="OpenClaw Control Panel" width="100%"/>
 
 <br/>
 
@@ -24,9 +24,9 @@ This is not a new problem. Unix solved it forty years ago.
 
 > *Do one thing and do it well.* — Doug McIlroy, 1978
 
-OpenClaw Manager applies this principle to AI agents.
+OpenClaw Control Panel applies this principle to AI agents.
 
-Instead of one overloaded bot, you run many. Each [OpenClaw](https://github.com/openclaw/openclaw) instance carries one responsibility, one tool surface, one slice of reality. **The manager does not unify them. It keeps them apart — observable, operable, and sovereign.**
+Instead of one overloaded bot, you run many. Each [OpenClaw](https://github.com/openclaw/openclaw) instance carries one responsibility, one tool surface, one slice of reality. **The control panel does not unify them. It keeps them apart — observable, operable, and sovereign.**
 
 ## The Worldline Model
 
@@ -44,7 +44,7 @@ Worldlines do not merge. That is the point.
 
 When you want to experiment, you don't add an `if` branch to your production bot. You spin up a new worldline. When the experiment fails, nothing else is contaminated. When it succeeds, it's already isolated and ready to promote.
 
-The manager watches the worldlines. It does not live inside them.
+The control panel watches the worldlines. It does not live inside them.
 
 ## Capabilities
 
@@ -142,7 +142,7 @@ Commands: `/projects` `/status <id>` `/start <id>` `/stop <id>` `/restart <id>` 
 </details>
 
 <details>
-<summary>&nbsp;💾&nbsp; <b>Runtime Data</b> — the manager's own memory</summary>
+<summary>&nbsp;💾&nbsp; <b>Runtime Data</b> — the control panel's own memory</summary>
 <br/>
 
 Registry and action history live in `data/` (gitignored). Pre-seed from examples:
@@ -163,9 +163,9 @@ Files are auto-created on first write if missing.
 Each project can use one of two runtime models:
 
 - `managed_openclaw`
-  Manager launches `gateway run` directly, keeps a pid/log under `data/runtime/`, and probes until the gateway is really up.
+  Control Panel launches `gateway run` directly, keeps a pid/log under `data/runtime/`, and probes until the gateway is really up.
 - `custom_commands`
-  Manager delegates start/stop/restart to your existing PM2, systemd, or shell workflow.
+  Control Panel delegates start/stop/restart to your existing PM2, systemd, or shell workflow.
 
 Use `managed_openclaw` for new isolated projects. Keep `custom_commands` for legacy deployments you already trust.
 
@@ -188,9 +188,9 @@ npm run build       # production build
 >
 > — Antoine de Saint-Exupéry
 
-The manager is intentionally thin. It does not aspire to become the thing it manages. It holds the registry, probes the health, executes the commands, and gets out of the way.
+The control panel is intentionally thin. It does not aspire to become the thing it manages. It holds the registry, probes the health, executes the commands, and gets out of the way.
 
-The depth belongs to each worldline. The breadth belongs to the manager.
+The depth belongs to each worldline. The breadth belongs to the control panel.
 
 Mixing them is how software dies.
 

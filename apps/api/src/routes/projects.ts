@@ -5,6 +5,7 @@ import { ActionHistoryService } from "../services/action-history";
 import { executeProjectAction } from "../services/project-command-runner";
 import { readProjectMemoryProfile, updateProjectMemoryMode } from "../services/project-memory-mode";
 import { readProjectModelProfile, updateProjectPrimaryModel } from "../services/project-models";
+import { runProjectSmokeTest } from "../services/project-smoke-test";
 import { applyProjectTemplate, listProjectTemplates } from "../services/project-templates";
 import { scanProjectCompatibility } from "../services/project-compatibility";
 import { buildProjectListResponse, probeProjectRuntime } from "../services/project-probe";
@@ -399,6 +400,67 @@ export function createProjectsRouter(options: {
   );
 
   projectsRouter.post(
+    "/:id/smoke-test",
+    handleAsync(async (request, response) => {
+      const registry = await registryService.readRegistry();
+      const project = registry.projects.find((entry) => entry.id === request.params.id);
+
+      if (!project) {
+        throw new HttpError(404, `Project "${request.params.id}" was not found.`);
+      }
+
+      const runtime = await probeProjectRuntime(project);
+      if (runtime.runtimeStatus !== "running") {
+        throw new HttpError(409, `Project "${project.id}" must be running before smoke testing.`);
+      }
+
+      const gatewayAuth =
+        project.auth.mode === "inherit_manager"
+          ? registry.managerAuth
+          : {
+              strategy: project.auth.strategy,
+              secret: project.auth.secret,
+            };
+
+      const smoke = await runProjectSmokeTest({
+        project,
+        gatewayAuth,
+      });
+      await registryService.updateProjectSmokeTest(project.id, smoke.response);
+
+      const summary = `${project.name} smoke test ${smoke.response.summary.passed}/${smoke.response.summary.total} 通过`;
+      const detail = [
+        `Provider: ${smoke.response.summary.provider ?? "unknown"}.`,
+        `Model: ${smoke.response.summary.model ?? "unknown"}.`,
+        ...smoke.response.results.map(
+          (entry) =>
+            `${entry.label}: ${entry.ok ? "ok" : `failed (${entry.error ?? "unknown error"})`} in ${entry.durationMs}ms.`,
+        ),
+      ].join(" ");
+
+      await actionHistoryService.appendEntry({
+        kind: "project_action",
+        ok: smoke.response.ok,
+        projects: [
+          {
+            id: project.id,
+            name: project.name,
+          },
+        ],
+        summary,
+        detail,
+        command: smoke.commandLog,
+        stdout: smoke.stdoutLog,
+        stderr: smoke.stderrLog.length > 0 ? smoke.stderrLog : null,
+        durationMs: smoke.response.results.reduce((total, entry) => total + entry.durationMs, 0),
+        actionName: "smoke_test",
+      });
+
+      response.json(smoke.response);
+    }),
+  );
+
+  projectsRouter.post(
     "/:id/scan-compatibility",
     handleAsync(async (request, response) => {
       const project = await registryService.getProject(request.params.id);
@@ -446,7 +508,7 @@ export function createProjectsRouter(options: {
           },
         ],
         summary: `项目 ${project.name} 已删除`,
-        detail: `Removed ${project.id} from the manager registry.`,
+        detail: `Removed ${project.id} from the Control Panel registry.`,
         command: null,
         stdout: null,
         stderr: null,

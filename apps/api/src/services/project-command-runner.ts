@@ -279,7 +279,7 @@ async function executeManagedStart(
       command: existingState.command,
       startedAt,
       exitCode: 0,
-      stdout: `Project already running under manager launcher (pid ${existingState.pid}).`,
+      stdout: `Project already running under Control Panel launcher (pid ${existingState.pid}).`,
     });
   }
 
@@ -290,7 +290,7 @@ async function executeManagedStart(
       startedAt,
       exitCode: 1,
       stderr:
-        "Gateway port is already in use, but manager does not have a live runtime state for this project.",
+        "Gateway port is already in use, but Control Panel does not have a live runtime state for this project.",
     });
   }
 
@@ -312,7 +312,7 @@ async function executeManagedStart(
 
     childPid = child.pid;
     if (typeof childPid !== "number") {
-      throw new HttpError(500, `Manager could not start project "${project.id}".`);
+      throw new HttpError(500, `Control Panel could not start project "${project.id}".`);
     }
 
     child.unref();
@@ -393,7 +393,7 @@ async function executeManagedStop(
       startedAt,
       exitCode: 1,
       stderr:
-        "Gateway port is still open, but manager has no runtime state for this project. Stop it manually or re-register it with custom commands.",
+        "Gateway port is still open, but Control Panel has no runtime state for this project. Stop it manually or re-register it with custom commands.",
     });
   }
 

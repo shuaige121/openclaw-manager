@@ -1,8 +1,8 @@
 {
-  "name": "@openclaw-manager/api",
+  "name": "@openclaw/control-panel-api",
   "version": "0.1.0",
   "private": true,
-  "description": "TypeScript Express API for the OpenClaw manager backend.",
+  "description": "TypeScript Express API for the OpenClaw Control Panel backend.",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

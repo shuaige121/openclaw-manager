@@ -39,6 +39,27 @@ function stopCardClick(event: MouseEvent<HTMLElement>) {
   event.stopPropagation();
 }
 
+function formatObservedModel(project: ProjectListItem): string {
+  if (project.model.primaryRef && project.model.lastObservedRef) {
+    if (project.model.primaryRef === project.model.lastObservedRef) {
+      return project.model.primaryRef;
+    }
+
+    return `${project.model.primaryRef} · 实测 ${project.model.lastObservedRef}`;
+  }
+
+  return project.model.primaryRef ?? project.model.lastObservedRef ?? "未显式设置";
+}
+
+function formatSmokeSummary(project: ProjectListItem): string {
+  const smoke = project.lastSmokeTest;
+  if (!smoke) {
+    return "未测试";
+  }
+
+  return `${smoke.summary.passed}/${smoke.summary.total}`;
+}
+
 export function ProjectCard({
   project,
   selected,
@@ -88,19 +109,19 @@ export function ProjectCard({
         </div>
         <div>
           <dt>Model</dt>
-          <dd>{project.model.primaryRef ?? "未显式设置"}</dd>
+          <dd>{formatObservedModel(project)}</dd>
         </div>
         <div>
           <dt>Memory</dt>
           <dd>{project.memory.mode}</dd>
         </div>
         <div>
-          <dt>Sandbox</dt>
-          <dd>{project.sandbox.mode}</dd>
+          <dt>Smoke</dt>
+          <dd>{formatSmokeSummary(project)}</dd>
         </div>
         <div>
-          <dt>Workspace</dt>
-          <dd>{project.paths.workspacePath}</dd>
+          <dt>Sandbox</dt>
+          <dd>{project.sandbox.mode}</dd>
         </div>
       </dl>
 
@@ -114,10 +135,10 @@ export function ProjectCard({
 
       <footer className="project-actions" onClick={stopCardClick}>
         <a href={project.endpoints.controlUiUrl} target="_blank" rel="noreferrer">
-          打开 Control UI
+          打开 Control UI &#8599;
         </a>
         <a href={project.endpoints.gatewayUrl} target="_blank" rel="noreferrer">
-          打开 Gateway
+          打开 Gateway &#8599;
         </a>
       </footer>
     </article>

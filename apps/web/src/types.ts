@@ -17,6 +17,11 @@ export type ProjectSandboxWorkspaceAccess = "none" | "ro" | "rw";
 export type ProjectHookSource = "internal";
 export type ProjectSkillSource = "bundled" | "managed" | "workspace" | "config_only";
 export type ProjectTemplateId = "general" | "stateless" | "sandboxed";
+export type ProjectSmokeTestScenarioId =
+  | "model_identity"
+  | "tool_exec_time"
+  | "tool_web_fetch"
+  | "context_recall";
 export type ProjectCompatibilityCheckName =
   | "lifecycle"
   | "gateway_probe"
@@ -77,6 +82,9 @@ export type ProjectModelProfile = {
   fallbackRefs: string[];
   catalogMode: "open" | "allowlist";
   configuredModels: ProjectModelOption[];
+  lastObservedProvider: string | null;
+  lastObservedRef: string | null;
+  lastObservedAt: string | null;
 };
 
 export type ProjectMemoryProfile = {
@@ -164,6 +172,7 @@ export type ProjectListItem = {
   skills: ProjectSkillsProfile;
   capabilities: ProjectCapabilities;
   compatibility: ProjectCompatibilityProfile;
+  lastSmokeTest: ProjectSmokeTestResponse | null;
 };
 
 export type ManagerAuthProfile = {
@@ -335,6 +344,33 @@ export type ProjectTemplateApplyResponse = {
   memory: ProjectMemoryProfile;
   sandbox: ProjectSandboxProfile;
   item: ProjectListItem | null;
+};
+
+export type ProjectSmokeTestScenarioResult = {
+  id: ProjectSmokeTestScenarioId;
+  label: string;
+  ok: boolean;
+  durationMs: number;
+  outputText: string;
+  toolHint: string | null;
+  provider: string | null;
+  model: string | null;
+  error: string | null;
+};
+
+export type ProjectSmokeTestResponse = {
+  ok: boolean;
+  projectId: string;
+  startedAt: string;
+  finishedAt: string;
+  sessionId: string;
+  summary: {
+    passed: number;
+    total: number;
+    provider: string | null;
+    model: string | null;
+  };
+  results: ProjectSmokeTestScenarioResult[];
 };
 
 export type BulkActionExecutePayload =

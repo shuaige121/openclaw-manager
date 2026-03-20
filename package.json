@@ -1,8 +1,8 @@
 {
-  "name": "openclaw-manager",
+  "name": "openclaw-control-panel",
   "private": true,
   "version": "0.1.0",
-  "description": "Multi-project control plane for running and operating many raw OpenClaw gateways.",
+  "description": "Multi-project control panel for running and operating many raw OpenClaw gateways.",
   "keywords": [
     "openclaw",
     "openclaw-manager",

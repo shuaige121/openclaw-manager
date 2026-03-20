@@ -16,6 +16,7 @@ import type {
   ProjectCompatibilityScanResponse,
   ProjectMemoryModeUpdateResponse,
   ProjectModelUpdateResponse,
+  ProjectSmokeTestResponse,
   ProjectTemplateApplyResponse,
   ProjectTemplateDefinition,
   ProjectTemplateListResponse,
@@ -90,6 +91,8 @@ export default function App() {
   const [memoryUpdateProjectId, setMemoryUpdateProjectId] = useState<string | null>(null);
   const [templateApplyProjectId, setTemplateApplyProjectId] = useState<string | null>(null);
   const [catalogActionKey, setCatalogActionKey] = useState<string | null>(null);
+  const [smokeTestProjectId, setSmokeTestProjectId] = useState<string | null>(null);
+  const [smokeTestResult, setSmokeTestResult] = useState<ProjectSmokeTestResponse | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -395,7 +398,7 @@ export default function App() {
   }
 
   async function deleteProject(projectId: string) {
-    if (!window.confirm(`确认删除项目 ${projectId} 吗？这会从 manager 注册表中移除它。`)) {
+    if (!window.confirm(`确认删除项目 ${projectId} 吗？这会从 Control Panel 注册表中移除它。`)) {
       return;
     }
 
@@ -510,6 +513,34 @@ export default function App() {
       });
     } finally {
       setCompatibilityScanProjectId(null);
+    }
+  }
+
+  async function runProjectSmokeTest(projectId: string) {
+    setSmokeTestProjectId(projectId);
+    setNotice(null);
+
+    try {
+      const response = await requestApi<ProjectSmokeTestResponse>(`/api/projects/${projectId}/smoke-test`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      setSmokeTestResult(response);
+      setNotice({
+        tone: response.ok ? "success" : "error",
+        text: `${projectId} smoke test ${response.summary.passed}/${response.summary.total} 通过。当前模型：${response.summary.provider ?? "unknown"}/${response.summary.model ?? "unknown"}`,
+      });
+      reloadProjects(projectId);
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: toErrorMessage(error),
+      });
+    } finally {
+      setSmokeTestProjectId(null);
     }
   }
 
@@ -758,15 +789,18 @@ export default function App() {
           deleting={mutationState === "deleting"}
           activeAction={activeProjectAction}
           scanningCompatibility={compatibilityScanProjectId === activeProject?.id}
+          smokeTesting={smokeTestProjectId === activeProject?.id}
           modelUpdating={modelUpdateProjectId === activeProject?.id}
           memoryUpdating={memoryUpdateProjectId === activeProject?.id}
           templateApplying={templateApplyProjectId === activeProject?.id}
           catalogActionKey={catalogActionKey}
+          smokeTestResult={smokeTestResult}
           templates={templates}
           onEdit={openEditPanel}
           onDelete={deleteProject}
           onRunAction={runProjectAction}
           onScanCompatibility={scanProjectCompatibility}
+          onRunSmokeTest={runProjectSmokeTest}
           onUpdateModel={updateProjectModel}
           onUpdateMemoryMode={updateProjectMemoryMode}
           onApplyTemplate={applyTemplateToProject}
@@ -792,7 +826,7 @@ export default function App() {
           subtitle={
             activeProject
               ? "这里会保留这个项目最近的生命周期、批量变更和注册表修改记录。"
-              : "这里会保留整个 manager 最近的操作记录。"
+              : "这里会保留整个 Control Panel 最近的操作记录。"
           }
           items={visibleHistoryItems}
           emptyMessage={
@@ -809,25 +843,20 @@ export default function App() {
     <main className="shell">
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">OpenClaw Manager</p>
-          <h1>一个控制面板，管理多个原始 OpenClaw 项目。</h1>
-          <p className="hero-lede">
-            面向运行多个 OpenClaw gateway 的团队。
-            Manager 负责项目总览、健康探测、生命周期动作、批量操作和入口跳转；
-            单项目深控继续交给各自的 OpenClaw Control UI。
-          </p>
+          <p className="eyebrow">OpenClaw Control Panel</p>
+          <h1>多项目控制台</h1>
         </div>
 
         <div className="hero-actions">
+          <button type="button" className="primary-button" onClick={openCreatePanel}>
+            新增项目
+          </button>
           <button
             type="button"
-            className="primary-button"
+            className="ghost-button"
             onClick={() => setReloadToken((value) => value + 1)}
           >
             刷新项目
-          </button>
-          <button type="button" className="ghost-button" onClick={openCreatePanel}>
-            新增项目
           </button>
         </div>
       </section>
@@ -851,7 +880,7 @@ export default function App() {
         <article className="summary-card">
           <span className="summary-label">Auth 覆盖</span>
           <strong>{data?.summary.authOverrides ?? 0}</strong>
-          <span className="summary-hint">其余项目继承 manager 默认 auth</span>
+          <span className="summary-hint">其余项目继承 Control Panel 默认 auth</span>
         </article>
       </section>
 
@@ -878,21 +907,12 @@ export default function App() {
             <p className="panel-kicker">项目视图</p>
             <h2>项目卡片 + 右侧详情</h2>
           </div>
-
-          <label className="search-input">
-            <span>搜索</span>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="按项目名、路径、tag、auth 搜索"
-            />
-          </label>
         </div>
 
         {status === "loading" ? (
           <div className="state-card">
             <h3>正在加载项目</h3>
-            <p>请求同源 `GET /api/projects`，准备构建 manager 视图。</p>
+            <p>请求同源 `GET /api/projects`，准备构建 Control Panel 视图。</p>
           </div>
         ) : null}
 
@@ -906,6 +926,14 @@ export default function App() {
         {status === "ready" ? (
           <div className="workspace-grid">
             <div className="project-column">
+              <label className="search-input">
+                <span>搜索</span>
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="按项目名、路径、tag、auth 搜索"
+                />
+              </label>
               {filteredProjects.length === 0 ? (
                 <div className="state-card state-card-empty">
                   <h3>没有匹配的项目</h3>

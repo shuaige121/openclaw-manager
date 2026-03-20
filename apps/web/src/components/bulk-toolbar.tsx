@@ -50,7 +50,7 @@ export function BulkToolbar({
         <p className="panel-kicker">批量操作</p>
         <h2>已选 {selectedProjects.length} 个项目</h2>
         <p className="muted-copy">
-          单项目深控交给各自 Control UI，跨项目变更由 manager 统一执行。
+          单项目深控交给各自 Control UI，跨项目变更由 Control Panel 统一执行。
         </p>
       </div>
 

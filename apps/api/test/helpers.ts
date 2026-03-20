@@ -36,52 +36,134 @@ export async function createFakeOpenClawCli(tempDir: string): Promise<string> {
   const cliPath = path.join(tempDir, "fake-openclaw.mjs");
   const source = `
 import http from "node:http";
+import crypto from "node:crypto";
+import path from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const args = process.argv.slice(2);
-let port = 0;
-let bind = "loopback";
+const stateDir = process.env.OPENCLAW_STATE_DIR ?? process.cwd();
 
-for (let index = 0; index < args.length; index += 1) {
-  const value = args[index];
-  if (value === "--port") {
-    port = Number.parseInt(args[index + 1] ?? "0", 10);
-    index += 1;
-    continue;
-  }
-  if (value === "--bind") {
-    bind = args[index + 1] ?? "loopback";
-    index += 1;
+async function loadSessionStore() {
+  const sessionsPath = path.join(stateDir, "fake-agent-sessions.json");
+  try {
+    return JSON.parse(await readFile(sessionsPath, "utf8"));
+  } catch {
+    return {};
   }
 }
 
-if (args[0] !== "gateway" || args[1] !== "run" || !Number.isInteger(port) || port <= 0) {
+async function saveSessionStore(store) {
+  const sessionsPath = path.join(stateDir, "fake-agent-sessions.json");
+  await mkdir(path.dirname(sessionsPath), { recursive: true });
+  await writeFile(sessionsPath, JSON.stringify(store, null, 2) + "\\n", "utf8");
+}
+
+function getArgValue(name) {
+  const index = args.indexOf(name);
+  if (index === -1) {
+    return "";
+  }
+  return args[index + 1] ?? "";
+}
+
+if (args[0] === "agent") {
+  const sessionId = getArgValue("--session-id") || "default-session";
+  const message = getArgValue("--message");
+  const store = await loadSessionStore();
+  const previous = typeof store[sessionId]?.lastMessage === "string" ? store[sessionId].lastMessage : "";
+
+  let text = "ok";
+  if (message.includes("what model are you currently using")) {
+    text = "I'm currently using anthropic/claude-opus-4-6.";
+  } else if (message.includes("current UTC time from this server")) {
+    text = "2026-03-18 03:57:14 UTC\\nexec (shell: date -u)";
+  } else if (message.includes("title of the OpenClaw docs homepage")) {
+    text = "OpenClaw\\nweb_fetch";
+  } else if (message.includes("what was the previous question")) {
+    text = previous.includes("OpenClaw docs homepage")
+      ? "You asked me to find the title of the OpenClaw docs homepage at docs.openclaw.ai."
+      : "I cannot see the previous question.";
+  }
+
+  store[sessionId] = {
+    lastMessage: message,
+  };
+  await saveSessionStore(store);
+
+  console.log(
+    JSON.stringify({
+      runId: crypto.randomUUID(),
+      status: "ok",
+      summary: "completed",
+      result: {
+        payloads: [
+          {
+            text,
+            mediaUrl: null,
+          },
+        ],
+        meta: {
+          durationMs: 1234,
+          agentMeta: {
+            provider: "anthropic",
+            model: "claude-opus-4-6",
+          },
+        },
+      },
+    }),
+  );
+  process.exit(0);
+}
+
+if (args[0] === "gateway" && args[1] === "run") {
+  let port = 0;
+  let bind = "loopback";
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    if (value === "--port") {
+      port = Number.parseInt(args[index + 1] ?? "0", 10);
+      index += 1;
+      continue;
+    }
+    if (value === "--bind") {
+      bind = args[index + 1] ?? "loopback";
+      index += 1;
+    }
+  }
+
+  if (!Number.isInteger(port) || port <= 0) {
+    console.error("unexpected fake openclaw invocation", args.join(" "));
+    process.exit(2);
+  }
+
+  const host = bind === "lan" ? "0.0.0.0" : "127.0.0.1";
+  const server = http.createServer((request, response) => {
+    if (request.url === "/healthz" || request.url === "/readyz") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end("<html><body>fake control ui</body></html>");
+  });
+
+  server.listen(port, host, () => {
+    console.log("[fake-openclaw] listening", host, port);
+  });
+
+  process.on("SIGTERM", () => {
+    server.close(() => {
+      process.exit(0);
+    });
+  });
+
+  setInterval(() => {}, 1000);
+} else {
   console.error("unexpected fake openclaw invocation", args.join(" "));
   process.exit(2);
 }
-
-const host = bind === "lan" ? "0.0.0.0" : "127.0.0.1";
-const server = http.createServer((request, response) => {
-  if (request.url === "/healthz" || request.url === "/readyz") {
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ ok: true }));
-    return;
-  }
-
-  response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  response.end("<html><body>fake control ui</body></html>");
-});
-
-server.listen(port, host, () => {
-  console.log("[fake-openclaw] listening", host, port);
-});
-
-process.on("SIGTERM", () => {
-  server.close(() => {
-    process.exit(0);
-  });
-});
-
-setInterval(() => {}, 1000);
 `;
 
   await writeFile(cliPath, source.trimStart(), "utf8");

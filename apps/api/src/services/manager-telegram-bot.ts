@@ -221,7 +221,7 @@ export class ManagerTelegramBotService {
       const replyText = await this.executeCommand(parsedCommand);
       await this.sendMessage(chatId, replyText);
     } catch (error) {
-      const messageText = error instanceof Error ? error.message : "Unknown manager bot error.";
+      const messageText = error instanceof Error ? error.message : "Unknown Control Panel bot error.";
       await this.sendMessage(chatId, `操作失败: ${messageText}`);
     }
   }
@@ -231,7 +231,7 @@ export class ManagerTelegramBotService {
       case "/help":
       case "/start":
         return [
-          "OpenClaw Manager bot commands:",
+          "OpenClaw Control Panel bot commands:",
           "/projects",
           "/status <projectId>",
           "/start <projectId>",
