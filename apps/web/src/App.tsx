@@ -357,6 +357,48 @@ export default function App() {
     }
   }
 
+  async function createProject(params: {
+    project: ProjectUpsertPayload;
+    templateId: ProjectTemplateId | null;
+    applyTemplateAfterCreate: boolean;
+  }) {
+    setMutationState("saving");
+    setEditorErrorMessage(null);
+    setNotice(null);
+
+    try {
+      const response = await requestApi<{ ok: true; projectId: string }>("/api/projects", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(params.project),
+      });
+
+      if (params.applyTemplateAfterCreate && params.templateId) {
+        await requestApi<ProjectTemplateApplyResponse>(
+          `/api/projects/${response.projectId}/apply-template`,
+          {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              templateId: params.templateId,
+              restartIfRunning: false,
+            }),
+          },
+        );
+      }
+
+      reloadProjects(response.projectId);
+    } finally {
+      setMutationState("idle");
+    }
+  }
+
   async function applyTemplateToProject(
     projectId: string,
     payload: {
@@ -731,6 +773,7 @@ export default function App() {
         busy={mutationState === "saving"}
         errorMessage={editorErrorMessage}
         onCancel={closeEditorPanel}
+        onCreate={createProject}
         onSubmit={submitProject}
       />
     );
@@ -768,6 +811,7 @@ export default function App() {
           busy={mutationState === "saving"}
           errorMessage={editorErrorMessage}
           onCancel={closeEditorPanel}
+          onCreate={createProject}
           onSubmit={submitProject}
         />
       );

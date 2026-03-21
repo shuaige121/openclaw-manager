@@ -286,6 +286,15 @@ export type ProjectUpsertPayload = {
       };
   lifecycle: ProjectLifecycle;
   capabilities: ProjectCapabilities;
+  channelType?: "none" | "telegram" | "wecom" | "feishu" | "whatsapp";
+  channelCredentials?: {
+    botToken?: string;
+    botId?: string;
+    secret?: string;
+    appId?: string;
+    appSecret?: string;
+  };
+  createInstance?: boolean;
 };
 
 export type ProjectActionResponse = {

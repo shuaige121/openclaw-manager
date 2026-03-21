@@ -2,6 +2,7 @@ import path from "node:path";
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { HttpError } from "../lib/http-error";
 import { ActionHistoryService } from "../services/action-history";
+import { createInstance } from "../services/instance-creator";
 import { executeProjectAction } from "../services/project-command-runner";
 import { readProjectMemoryProfile, updateProjectMemoryMode } from "../services/project-memory-mode";
 import { readProjectModelProfile, updateProjectPrimaryModel } from "../services/project-models";
@@ -18,10 +19,158 @@ type AsyncRouteHandler = (
   next: NextFunction,
 ) => Promise<void>;
 
+const PROJECT_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 function handleAsync(handler: AsyncRouteHandler) {
   return (request: Request, response: Response, next: NextFunction) => {
     void handler(request, response, next).catch(next);
   };
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseProjectIdForProvisioning(value: unknown): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new HttpError(400, "project.id must be a non-empty string.");
+  }
+
+  const normalizedId = value.trim().toLowerCase();
+  if (!PROJECT_ID_PATTERN.test(normalizedId)) {
+    throw new HttpError(
+      400,
+      "project.id must use lowercase letters, numbers, and single hyphens.",
+    );
+  }
+
+  return normalizedId;
+}
+
+function parseRequestedGatewayPort(value: unknown): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isObject(value)) {
+    throw new HttpError(400, "project.gateway must be an object.");
+  }
+
+  if (value.port === undefined) {
+    return undefined;
+  }
+
+  if (
+    typeof value.port !== "number" ||
+    !Number.isInteger(value.port) ||
+    value.port < 1 ||
+    value.port > 65535
+  ) {
+    throw new HttpError(400, "project.gateway.port must be an integer between 1 and 65535.");
+  }
+
+  return value.port;
+}
+
+function parseOptionalChannelType(value: unknown):
+  | "telegram"
+  | "wecom"
+  | "feishu"
+  | "whatsapp"
+  | "none"
+  | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (
+    value === "telegram" ||
+    value === "wecom" ||
+    value === "feishu" ||
+    value === "whatsapp" ||
+    value === "none"
+  ) {
+    return value;
+  }
+
+  throw new HttpError(
+    400,
+    'channelType must be "none", "telegram", "wecom", "feishu", or "whatsapp".',
+  );
+}
+
+function parseOptionalChannelCredentials(value: unknown): Record<string, string> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isObject(value)) {
+    throw new HttpError(400, "channelCredentials must be an object.");
+  }
+
+  const entries = Object.entries(value).map(([key, entryValue]) => {
+    if (typeof entryValue !== "string") {
+      throw new HttpError(400, `channelCredentials.${key} must be a string.`);
+    }
+
+    return [key, entryValue] as const;
+  });
+
+  return Object.fromEntries(entries);
+}
+
+function parseOptionalSandboxMode(value: unknown): "off" | "all" | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === "off" || value === "all") {
+    return value;
+  }
+
+  throw new HttpError(400, 'sandboxMode must be "off" or "all".');
+}
+
+function parseOptionalTags(value: unknown): string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, "project.tags must be an array of strings.");
+  }
+
+  return value.map((tag, index) => {
+    if (typeof tag !== "string") {
+      throw new HttpError(400, `project.tags[${index}] must be a string.`);
+    }
+
+    return tag;
+  });
+}
+
+function parseOptionalString(value: unknown, fieldName: string): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new HttpError(400, `${fieldName} must be a string.`);
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function resolveProvisionedRootPath(
+  projects: ReadonlyArray<{ id: string; paths: { rootPath: string } }>,
+  fallbackPath: string,
+): string {
+  return (
+    projects.find((project) => project.id === "main")?.paths.rootPath ??
+    projects[0]?.paths.rootPath ??
+    fallbackPath
+  );
 }
 
 function parseModelUpdateBody(value: unknown): {
@@ -142,6 +291,99 @@ export function createProjectsRouter(options: {
   projectsRouter.post(
     "/",
     handleAsync(async (request, response) => {
+      if (isObject(request.body) && request.body.createInstance === true) {
+        const body = request.body;
+        const projectId = parseProjectIdForProvisioning(body.id);
+        const registry = await registryService.readRegistry();
+
+        if (registry.projects.some((project) => project.id === projectId)) {
+          throw new HttpError(409, `Project "${projectId}" already exists.`);
+        }
+
+        const existingPorts = registry.projects.map((project) => project.gateway.port);
+        const { createInstance: _createInstanceFlag, channelType: _channelType, channelCredentials: _channelCredentials, model: _model, sandboxMode: _sandboxMode, ...projectBody } = body;
+
+        let instance;
+        try {
+          instance = await createInstance(
+            {
+              profileName: projectId,
+              displayName: typeof body.name === "string" ? body.name : "",
+              description: parseOptionalString(body.description, "project.description"),
+              model: parseOptionalString(body.model, "model"),
+              port: parseRequestedGatewayPort(body.gateway),
+              channelType: parseOptionalChannelType(body.channelType),
+              channelCredentials: parseOptionalChannelCredentials(body.channelCredentials),
+              sandboxMode: parseOptionalSandboxMode(body.sandboxMode),
+              tags: parseOptionalTags(body.tags),
+            },
+            existingPorts,
+          );
+        } catch (error) {
+          if (error instanceof HttpError) {
+            throw error;
+          }
+
+          throw new HttpError(
+            500,
+            error instanceof Error ? error.message : "Failed to create OpenClaw instance.",
+          );
+        }
+
+        const createdProject = await registryService.createProject({
+          ...projectBody,
+          id: projectId,
+          gateway: {
+            ...(isObject(body.gateway) ? body.gateway : {}),
+            port: instance.port,
+          },
+          paths: {
+            ...(isObject(body.paths) ? body.paths : {}),
+            rootPath: resolveProvisionedRootPath(registry.projects, instance.stateDirPath),
+            configPath: instance.configPath,
+            workspacePath: instance.workspacePath,
+          },
+          lifecycle: {
+            ...(isObject(body.lifecycle) ? body.lifecycle : {}),
+            mode: "managed_openclaw",
+          },
+        });
+        const compatibility = await scanProjectCompatibility(createdProject);
+        const project = await registryService.updateProjectCompatibility(createdProject.id, compatibility);
+        await actionHistoryService.appendEntry({
+          kind: "project_registry",
+          ok: true,
+          projects: [
+            {
+              id: project.id,
+              name: project.name,
+            },
+          ],
+          summary: `项目 ${project.name} 已创建`,
+          detail: `Registered ${project.id} at gateway port ${project.gateway.port}.`,
+          command: null,
+          stdout: null,
+          stderr: null,
+          durationMs: null,
+          actionName: "project_create",
+        });
+        response.status(201).json({
+          ok: true,
+          created: true,
+          projectId: project.id,
+          registryPath: registryService.getRegistryPath(),
+          instance: {
+            profileName: instance.profileName,
+            port: instance.port,
+            rootPath: project.paths.rootPath,
+            configPath: instance.configPath,
+            workspacePath: instance.workspacePath,
+            stateDirPath: instance.stateDirPath,
+          },
+        });
+        return;
+      }
+
       const createdProject = await registryService.createProject(request.body);
       const compatibility = await scanProjectCompatibility(createdProject);
       const project = await registryService.updateProjectCompatibility(createdProject.id, compatibility);

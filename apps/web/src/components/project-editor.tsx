@@ -13,6 +13,12 @@ import type {
   ProjectUpsertPayload,
 } from "../types";
 
+type ProjectEditorSubmitPayload = {
+  project: ProjectUpsertPayload;
+  templateId: ProjectTemplateId | null;
+  applyTemplateAfterCreate: boolean;
+};
+
 type ProjectEditorProps = {
   mode: "create" | "edit";
   managerAuth: ManagerAuthProfile | null;
@@ -21,11 +27,8 @@ type ProjectEditorProps = {
   busy: boolean;
   errorMessage: string | null;
   onCancel: () => void;
-  onSubmit: (payload: {
-    project: ProjectUpsertPayload;
-    templateId: ProjectTemplateId | null;
-    applyTemplateAfterCreate: boolean;
-  }) => Promise<void>;
+  onCreate?: (payload: ProjectEditorSubmitPayload) => Promise<void>;
+  onSubmit: (payload: ProjectEditorSubmitPayload) => Promise<void>;
 };
 
 type EditorState = {
@@ -195,12 +198,14 @@ function SimpleCreatorForm({
   busy,
   errorMessage,
   onCancel,
+  onCreate,
   onSubmit,
   templates,
 }: {
   busy: boolean;
   errorMessage: string | null;
   onCancel: () => void;
+  onCreate: ProjectEditorProps["onCreate"];
   onSubmit: ProjectEditorProps["onSubmit"];
   templates: ProjectTemplateDefinition[];
 }) {
@@ -218,10 +223,25 @@ function SimpleCreatorForm({
   const [advanced, setAdvanced] = useState<EditorState>(createDefaultState);
   const [localError, setLocalError] = useState<string | null>(null);
   const [generatedId, setGeneratedId] = useState("");
+  const [submitState, setSubmitState] = useState<"idle" | "submitting" | "success">("idle");
 
   useEffect(() => {
     setGeneratedId(generateProjectId(simple.botName));
   }, [simple.botName]);
+
+  useEffect(() => {
+    if (submitState !== "success") {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      onCancel();
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [onCancel, submitState]);
 
   function updateSimple<K extends keyof SimpleCreatorState>(key: K, value: SimpleCreatorState[K]) {
     setSimple((current) => ({ ...current, [key]: value }));
@@ -232,10 +252,13 @@ function SimpleCreatorForm({
   }
 
   const selectedTemplate = templates.find((t) => t.id === advanced.templateId) ?? templates[0] ?? null;
+  const isBusy = busy || submitState !== "idle";
+  const submitCreate = onCreate ?? onSubmit;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLocalError(null);
+    setSubmitState("idle");
 
     const name = simple.botName.trim();
     if (name.length === 0) {
@@ -362,16 +385,26 @@ function SimpleCreatorForm({
             bulkConfigPatch: advanced.bulkConfigPatch,
           }
         : DEFAULT_CAPABILITIES,
+      channelType: simple.channelType,
+      channelCredentials: getChannelCredentials(simple),
+      createInstance: true,
     };
 
     const templateId = showAdvanced ? advanced.templateId : "general";
     const applyTemplate = showAdvanced ? advanced.applyTemplateAfterCreate : false;
 
-    await onSubmit({
-      project: payload,
-      templateId,
-      applyTemplateAfterCreate: applyTemplate,
-    });
+    try {
+      setSubmitState("submitting");
+      await submitCreate({
+        project: payload,
+        templateId,
+        applyTemplateAfterCreate: applyTemplate,
+      });
+      setSubmitState("success");
+    } catch (error) {
+      setSubmitState("idle");
+      setLocalError(toErrorMessage(error));
+    }
   }
 
   return (
@@ -395,7 +428,7 @@ function SimpleCreatorForm({
               value={simple.botName}
               onChange={(e) => updateSimple("botName", e.target.value)}
               placeholder="例如：我的助手、客服机器人"
-              disabled={busy}
+              disabled={isBusy}
               autoFocus
             />
             {simple.botName.trim().length > 0 ? (
@@ -420,7 +453,7 @@ function SimpleCreatorForm({
                   value={option.value}
                   checked={simple.channelType === option.value}
                   onChange={() => updateSimple("channelType", option.value)}
-                  disabled={busy}
+                  disabled={isBusy}
                 />
                 <span className="channel-radio-label">{option.label}</span>
               </label>
@@ -436,7 +469,7 @@ function SimpleCreatorForm({
                   value={simple.telegramToken}
                   onChange={(e) => updateSimple("telegramToken", e.target.value)}
                   placeholder="从 @BotFather 获取的 token"
-                  disabled={busy}
+                  disabled={isBusy}
                 />
               </label>
             </div>
@@ -456,7 +489,7 @@ function SimpleCreatorForm({
                   value={simple.wecomBotId}
                   onChange={(e) => updateSimple("wecomBotId", e.target.value)}
                   placeholder="企业微信机器人 ID"
-                  disabled={busy}
+                  disabled={isBusy}
                 />
               </label>
               <label className="form-field form-field-full">
@@ -466,7 +499,7 @@ function SimpleCreatorForm({
                   value={simple.wecomSecret}
                   onChange={(e) => updateSimple("wecomSecret", e.target.value)}
                   placeholder="企业微信机器人 Secret"
-                  disabled={busy}
+                  disabled={isBusy}
                 />
               </label>
             </div>
@@ -480,7 +513,7 @@ function SimpleCreatorForm({
                   value={simple.feishuAppId}
                   onChange={(e) => updateSimple("feishuAppId", e.target.value)}
                   placeholder="飞书应用 App ID"
-                  disabled={busy}
+                  disabled={isBusy}
                 />
               </label>
               <label className="form-field form-field-full">
@@ -490,7 +523,7 @@ function SimpleCreatorForm({
                   value={simple.feishuAppSecret}
                   onChange={(e) => updateSimple("feishuAppSecret", e.target.value)}
                   placeholder="飞书应用 App Secret"
-                  disabled={busy}
+                  disabled={isBusy}
                 />
               </label>
             </div>
@@ -505,7 +538,7 @@ function SimpleCreatorForm({
               onChange={(e) => updateSimple("port", e.target.value)}
               inputMode="numeric"
               placeholder="18800"
-              disabled={busy}
+              disabled={isBusy}
             />
             <span className="simple-field-hint">
               服务端口，已自动生成，可修改
@@ -517,6 +550,7 @@ function SimpleCreatorForm({
           type="button"
           className="advanced-toggle"
           onClick={() => setShowAdvanced((v) => !v)}
+          disabled={isBusy}
         >
           {showAdvanced ? "收起高级设置" : "高级设置"} {showAdvanced ? "\u25B2" : "\u25BC"}
         </button>
@@ -530,7 +564,7 @@ function SimpleCreatorForm({
                 <select
                   value={advanced.templateId}
                   onChange={(e) => updateAdvanced("templateId", e.target.value as ProjectTemplateId)}
-                  disabled={busy}
+                  disabled={isBusy}
                 >
                   {templates.map((template) => (
                     <option key={template.id} value={template.id}>
@@ -551,7 +585,7 @@ function SimpleCreatorForm({
                   type="checkbox"
                   checked={advanced.applyTemplateAfterCreate}
                   onChange={(e) => updateAdvanced("applyTemplateAfterCreate", e.target.checked)}
-                  disabled={busy || selectedTemplate === null}
+                  disabled={isBusy || selectedTemplate === null}
                 />
                 <span>创建后立即应用模板</span>
               </label>
@@ -566,7 +600,7 @@ function SimpleCreatorForm({
                     value={advanced.id}
                     onChange={(e) => updateAdvanced("id", e.target.value)}
                     placeholder={generatedId}
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                   <span className="simple-field-hint">留空则使用自动生成的 ID</span>
                 </label>
@@ -576,7 +610,7 @@ function SimpleCreatorForm({
                     value={advanced.description}
                     onChange={(e) => updateAdvanced("description", e.target.value)}
                     placeholder="留空则自动生成"
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                 </label>
                 <label className="form-field form-field-full">
@@ -585,7 +619,7 @@ function SimpleCreatorForm({
                     value={advanced.tags}
                     onChange={(e) => updateAdvanced("tags", e.target.value)}
                     placeholder="留空则自动生成"
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                 </label>
               </div>
@@ -600,7 +634,7 @@ function SimpleCreatorForm({
                     value={advanced.rootPath}
                     onChange={(e) => updateAdvanced("rootPath", e.target.value)}
                     placeholder={`~/.openclaw/instances/${generatedId}`}
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                 </label>
                 <label className="form-field form-field-full">
@@ -609,7 +643,7 @@ function SimpleCreatorForm({
                     value={advanced.configPath}
                     onChange={(e) => updateAdvanced("configPath", e.target.value)}
                     placeholder="留空则自动从 Root Path 推导"
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                 </label>
                 <label className="form-field form-field-full">
@@ -618,7 +652,7 @@ function SimpleCreatorForm({
                     value={advanced.workspacePath}
                     onChange={(e) => updateAdvanced("workspacePath", e.target.value)}
                     placeholder="留空则自动从 Root Path 推导"
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                 </label>
               </div>
@@ -632,7 +666,7 @@ function SimpleCreatorForm({
                   <select
                     value={advanced.protocol}
                     onChange={(e) => updateAdvanced("protocol", e.target.value as ProjectGatewayProtocol)}
-                    disabled={busy}
+                    disabled={isBusy}
                   >
                     <option value="http">http</option>
                     <option value="https">https</option>
@@ -644,7 +678,7 @@ function SimpleCreatorForm({
                     value={advanced.host}
                     onChange={(e) => updateAdvanced("host", e.target.value)}
                     placeholder="127.0.0.1"
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                 </label>
               </div>
@@ -658,7 +692,7 @@ function SimpleCreatorForm({
                   <select
                     value={advanced.authMode}
                     onChange={(e) => updateAdvanced("authMode", e.target.value as ProjectAuthMode)}
-                    disabled={busy}
+                    disabled={isBusy}
                   >
                     <option value="inherit_manager">使用默认认证</option>
                     <option value="custom">自定义认证</option>
@@ -671,7 +705,7 @@ function SimpleCreatorForm({
                       <select
                         value={advanced.authStrategy}
                         onChange={(e) => updateAdvanced("authStrategy", e.target.value as ProjectAuthStrategy)}
-                        disabled={busy}
+                        disabled={isBusy}
                       >
                         <option value="token">token</option>
                         <option value="password">password</option>
@@ -683,7 +717,7 @@ function SimpleCreatorForm({
                         value={advanced.authLabel}
                         onChange={(e) => updateAdvanced("authLabel", e.target.value)}
                         placeholder="自定义 token"
-                        disabled={busy}
+                        disabled={isBusy}
                       />
                     </label>
                     <label className="form-field form-field-full">
@@ -693,7 +727,7 @@ function SimpleCreatorForm({
                         value={advanced.authSecret}
                         onChange={(e) => updateAdvanced("authSecret", e.target.value)}
                         placeholder="输入 token 或 password"
-                        disabled={busy}
+                        disabled={isBusy}
                       />
                     </label>
                   </>
@@ -709,7 +743,7 @@ function SimpleCreatorForm({
                   <select
                     value={advanced.lifecycleMode}
                     onChange={(e) => updateAdvanced("lifecycleMode", e.target.value as ProjectLifecycleMode)}
-                    disabled={busy}
+                    disabled={isBusy}
                   >
                     <option value="managed_openclaw">自动托管</option>
                     <option value="custom_commands">自定义命令</option>
@@ -722,7 +756,7 @@ function SimpleCreatorForm({
                       <select
                         value={advanced.lifecycleBind}
                         onChange={(e) => updateAdvanced("lifecycleBind", e.target.value as ProjectGatewayBindMode)}
-                        disabled={busy}
+                        disabled={isBusy}
                       >
                         <option value="loopback">loopback</option>
                         <option value="lan">lan</option>
@@ -734,7 +768,7 @@ function SimpleCreatorForm({
                         value={advanced.lifecycleStartupTimeoutMs}
                         onChange={(e) => updateAdvanced("lifecycleStartupTimeoutMs", e.target.value)}
                         inputMode="numeric"
-                        disabled={busy}
+                        disabled={isBusy}
                       />
                     </label>
                     <label className="form-field form-field-full">
@@ -743,7 +777,7 @@ function SimpleCreatorForm({
                         value={advanced.lifecycleCliPath}
                         onChange={(e) => updateAdvanced("lifecycleCliPath", e.target.value)}
                         placeholder="留空自动探测"
-                        disabled={busy}
+                        disabled={isBusy}
                       />
                     </label>
                     <label className="form-field form-field-full">
@@ -752,7 +786,7 @@ function SimpleCreatorForm({
                         value={advanced.lifecycleNodePath}
                         onChange={(e) => updateAdvanced("lifecycleNodePath", e.target.value)}
                         placeholder="留空使用默认 Node"
-                        disabled={busy}
+                        disabled={isBusy}
                       />
                     </label>
                     <label className="checkbox-field">
@@ -760,7 +794,7 @@ function SimpleCreatorForm({
                         type="checkbox"
                         checked={advanced.lifecycleAllowUnconfigured}
                         onChange={(e) => updateAdvanced("lifecycleAllowUnconfigured", e.target.checked)}
-                        disabled={busy}
+                        disabled={isBusy}
                       />
                       <span>启动时附加 `--allow-unconfigured`</span>
                     </label>
@@ -773,7 +807,7 @@ function SimpleCreatorForm({
                         value={advanced.startCommand}
                         onChange={(e) => updateAdvanced("startCommand", e.target.value)}
                         rows={2}
-                        disabled={busy}
+                        disabled={isBusy}
                       />
                     </label>
                     <label className="form-field form-field-full">
@@ -782,7 +816,7 @@ function SimpleCreatorForm({
                         value={advanced.stopCommand}
                         onChange={(e) => updateAdvanced("stopCommand", e.target.value)}
                         rows={2}
-                        disabled={busy}
+                        disabled={isBusy}
                       />
                     </label>
                     <label className="form-field form-field-full">
@@ -791,7 +825,7 @@ function SimpleCreatorForm({
                         value={advanced.restartCommand}
                         onChange={(e) => updateAdvanced("restartCommand", e.target.value)}
                         rows={2}
-                        disabled={busy}
+                        disabled={isBusy}
                       />
                     </label>
                   </>
@@ -807,7 +841,7 @@ function SimpleCreatorForm({
                     type="checkbox"
                     checked={advanced.bulkHooks}
                     onChange={(e) => updateAdvanced("bulkHooks", e.target.checked)}
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                   <span>允许批量 Hook</span>
                 </label>
@@ -816,7 +850,7 @@ function SimpleCreatorForm({
                     type="checkbox"
                     checked={advanced.bulkSkills}
                     onChange={(e) => updateAdvanced("bulkSkills", e.target.checked)}
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                   <span>允许批量 Skill</span>
                 </label>
@@ -825,7 +859,7 @@ function SimpleCreatorForm({
                     type="checkbox"
                     checked={advanced.bulkMemory}
                     onChange={(e) => updateAdvanced("bulkMemory", e.target.checked)}
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                   <span>允许批量记忆</span>
                 </label>
@@ -834,7 +868,7 @@ function SimpleCreatorForm({
                     type="checkbox"
                     checked={advanced.bulkConfigPatch}
                     onChange={(e) => updateAdvanced("bulkConfigPatch", e.target.checked)}
-                    disabled={busy}
+                    disabled={isBusy}
                   />
                   <span>允许批量配置 Patch</span>
                 </label>
@@ -843,15 +877,30 @@ function SimpleCreatorForm({
           </div>
         ) : null}
 
+        {submitState === "submitting" ? (
+          <div className="callout-box" role="status" aria-live="polite">
+            正在创建机器人...
+          </div>
+        ) : null}
+
+        {submitState === "success" ? (
+          <section className="inline-notice inline-notice-success" aria-live="polite">
+            <strong>创建成功</strong>
+            <span>机器人已创建！端口: {simple.port}</span>
+          </section>
+        ) : null}
+
         {localError || errorMessage ? (
-          <div className="callout-box callout-box-danger">{localError ?? errorMessage}</div>
+          <div className="callout-box callout-box-danger" role="alert">
+            {localError ?? errorMessage}
+          </div>
         ) : null}
 
         <div className="panel-action-row simple-creator-actions">
-          <button type="submit" className="primary-button simple-creator-submit" disabled={busy}>
-            {busy ? "创建中..." : "创建机器人"}
+          <button type="submit" className="primary-button simple-creator-submit" disabled={isBusy}>
+            {submitState === "submitting" ? "正在创建机器人..." : "创建机器人"}
           </button>
-          <button type="button" className="ghost-button" onClick={onCancel} disabled={busy}>
+          <button type="button" className="ghost-button" onClick={onCancel} disabled={isBusy}>
             取消
           </button>
         </div>
@@ -873,6 +922,38 @@ function channelDescription(channelType: ChannelType): string {
     case "none":
       return "本地使用的机器人，无消息通道";
   }
+}
+
+function getChannelCredentials(
+  simple: SimpleCreatorState,
+): NonNullable<ProjectUpsertPayload["channelCredentials"]> {
+  switch (simple.channelType) {
+    case "telegram":
+      return {
+        botToken: simple.telegramToken.trim(),
+      };
+    case "wecom":
+      return {
+        botId: simple.wecomBotId.trim(),
+        secret: simple.wecomSecret.trim(),
+      };
+    case "feishu":
+      return {
+        appId: simple.feishuAppId.trim(),
+        appSecret: simple.feishuAppSecret.trim(),
+      };
+    case "whatsapp":
+    case "none":
+      return {};
+  }
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "请求失败，请稍后再试。";
 }
 
 function channelTags(channelType: ChannelType): string[] {
@@ -1418,6 +1499,7 @@ export function ProjectEditor(props: ProjectEditorProps) {
         errorMessage={props.errorMessage}
         onCancel={props.onCancel}
         onSubmit={props.onSubmit}
+        onCreate={props.onCreate}
         templates={props.templates}
       />
     );
